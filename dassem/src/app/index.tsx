@@ -1,98 +1,54 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
+import { router, type Href } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { colors, motion, spacing, type } from '@/theme/tokens';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+const character = require('../../assets/dasseum/character.png');
+const logo = require('../../assets/dasseum/logo-mark.png');
+
+export default function SplashRoute() {
+  const [bob] = useState(() => new Animated.Value(0));
+  const goHome = () => router.replace('/(tabs)' as Href);
+
+  useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(bob, { toValue: 1, duration: motion.bobDuration / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(bob, { toValue: 0, duration: motion.bobDuration / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: Platform.OS !== 'web' }),
+    ]));
+    animation.start();
+    const timer = setTimeout(goHome, motion.splashDuration);
+    return () => { animation.stop(); clearTimeout(timer); };
+  }, [bob]);
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
-
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+    <SafeAreaView style={styles.safe}>
+      <Pressable accessibilityRole="button" accessibilityLabel="홈으로 이동" onPress={goHome} style={styles.page}>
+        <View style={styles.center}>
+          <Animated.View style={{ transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -12] }) }, { rotate: bob.interpolate({ inputRange: [0, 1], outputRange: ['-1.5deg', '1.5deg'] }) }] }}>
+            <Image source={character} contentFit="contain" style={styles.character} />
+          </Animated.View>
+          <Animated.View style={[styles.shadow, { opacity: bob.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.1] }), transform: [{ scaleX: bob.interpolate({ inputRange: [0, 1], outputRange: [1, 0.82] }) }] }]} />
+          <View style={styles.logoRow}><Image source={logo} contentFit="contain" style={styles.logo} /><Text style={type.splashLogo}>다씀</Text></View>
+          <Text style={[type.body, styles.tagline]}>있는 걸 먼저, 끝까지 다 쓰는 습관</Text>
+          <View style={styles.dots}>{[0, 1, 2].map((i) => <View key={i} style={[styles.dot, { opacity: 1 - i * 0.2 }]} />)}</View>
+        </View>
+      </Pressable>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  safe: { flex: 1, backgroundColor: colors.background },
+  page: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 60 },
+  center: { alignItems: 'center', gap: spacing['7xl'] },
+  character: { width: 250, height: 201 },
+  shadow: { width: 170, height: 16, marginTop: -34, borderRadius: 999, backgroundColor: colors.text },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  logo: { width: 40, height: 38 },
+  tagline: { color: colors.textSecondary, textAlign: 'center' },
+  dots: { flexDirection: 'row', gap: spacing.md },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
 });
