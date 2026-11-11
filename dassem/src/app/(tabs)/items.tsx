@@ -17,7 +17,7 @@ export default function ItemsScreen() {
     <AiNote eyebrow="AI 사용 순서 추천" text="유통기한이 짧거나 먼저 개봉한 제품부터 써요" />
     <View style={styles.list}>{items.map((item, index) => <View key={item.id} style={styles.item}>
       <View style={[styles.rank, { backgroundColor: colors.rank[Math.min(index, 3)] }]}><Text style={styles.rankText}>{index + 1}</Text></View>
-      <Thumb uri={item.imageUri} size={52} />
+      <Thumb uri={item.imageUri} category={item.category} size={52} />
       <View style={styles.copy}><Text style={type.itemName}>{item.name}</Text><View style={styles.tags}><CategoryTag text={item.category} /><StatusTag text={productStatus(item)} isExpiry={Boolean(item.expiresAt)} daysLeft={item.daysLeft ?? 999} /></View></View>
     </View>)}</View>
   </Screen>;

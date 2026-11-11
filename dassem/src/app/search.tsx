@@ -23,7 +23,7 @@ export default function SearchScreen() {
         <Button label="" onPress={() => router.push('/register')} variant="soft" style={styles.camera} icon={<AppIcon symbol="camera.fill" fallback="camera" size={25} color={colors.deep} />} />
       </View>
       <View><Text style={[type.itemName, styles.label]}>인기 검색어</Text><View style={styles.chips}>{popular.map((item) => <Chip key={item} label={item} onPress={() => setQuery(item)} />)}</View></View>
-      {Boolean(query.trim()) && <Card style={styles.preview}><Text style={type.itemName}>AI가 내 물품에서 {matches.length}개를 찾았어요</Text>{matches.map((item) => <View key={item.id} style={styles.item}><Thumb size={44} /><View style={styles.itemCopy}><Text style={type.itemName}>{item.name}</Text><StatusTag text={productStatus(item)} isExpiry={Boolean(item.expiresAt)} daysLeft={item.daysLeft ?? 999} /></View></View>)}{matches.length === 0 && <Text style={[type.bodySm, styles.muted]}>비슷한 물품이 아직 없어요.</Text>}</Card>}
+      {Boolean(query.trim()) && <Card style={styles.preview}><Text style={type.itemName}>AI가 내 물품에서 {matches.length}개를 찾았어요</Text>{matches.map((item) => <View key={item.id} style={styles.item}><Thumb uri={item.imageUri} category={item.category} size={44} /><View style={styles.itemCopy}><Text style={type.itemName}>{item.name}</Text><StatusTag text={productStatus(item)} isExpiry={Boolean(item.expiresAt)} daysLeft={item.daysLeft ?? 999} /></View></View>)}{matches.length === 0 && <Text style={[type.bodySm, styles.muted]}>비슷한 물품이 아직 없어요.</Text>}</Card>}
       <Button label="AI로 확인하기" disabled={!query.trim()} onPress={submit} />
     </View>
   </Screen>;

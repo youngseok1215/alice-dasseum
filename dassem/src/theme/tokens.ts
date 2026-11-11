@@ -86,6 +86,8 @@ export const shadow = {
     android: { elevation: 8 },
     default: { boxShadow: '0 8px 24px rgba(38,59,58,0.25)' } as ViewStyle,
   }),
+  // 로딩 캐릭터 발밑 흐린 타원. 납작한 막대가 아니라 퍼지는 그림자 (boxShadow는 RN 0.76+ 모든 플랫폼 지원)
+  splash: { backgroundColor: 'rgba(38,59,58,0.9)', boxShadow: '0 0 12px 8px rgba(38,59,58,0.9)' } as ViewStyle,
 } as const;
 
 export const motion = {

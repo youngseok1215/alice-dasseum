@@ -3,6 +3,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
+import { AppIcon } from '@/components/app-icon';
+import type { ProductCategory } from '@/types/product';
 import { colors, radius, shadow, type, statusTone } from './tokens';
 
 const character = require('../../assets/dasseum/character.png');
@@ -88,8 +90,59 @@ export function AiNote({ eyebrow, text }: { eyebrow?: string; text: string }) {
   );
 }
 
-export function Thumb({ uri, size = 56 }: { uri?: string; size?: number }) {
-  return <Image source={uri ? { uri } : undefined} contentFit="cover" style={{ width: size, height: size, borderRadius: radius.thumb, backgroundColor: colors.imageBg }} />;
+// 켜짐/꺼짐 스위치 (설정). 켜짐 deep, 꺼짐 textDisabled
+export function Toggle({ value, onValueChange, label }: { value: boolean; onValueChange: (next: boolean) => void; label: string }) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: value }}
+      hitSlop={6}
+      onPress={() => onValueChange(!value)}
+      style={[s.toggle, { backgroundColor: value ? colors.deep : colors.textDisabled, justifyContent: value ? 'flex-end' : 'flex-start' }]}>
+      <View style={s.knob} />
+    </Pressable>
+  );
+}
+
+// 2~3개 중 하나 고르기 (설정의 판단 기준 등)
+export function Segmented<T extends string>({ options, value, onChange }: { options: readonly { id: T; label: string }[]; value: T; onChange: (id: T) => void }) {
+  return (
+    <View style={s.segmented}>
+      {options.map((option) => {
+        const active = option.id === value;
+        return (
+          <Pressable
+            key={option.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => onChange(option.id)}
+            style={[s.segment, { backgroundColor: active ? colors.background : 'transparent' }]}>
+            <Text style={[type.itemName, { color: active ? colors.deep : colors.textSecondary }]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// 사진이 없으면 회색 빈칸 대신 카테고리 아이콘
+const categoryIcons = {
+  영양제: ['pills', 'nutrition-outline'],
+  화장품: ['drop', 'water-outline'],
+  의약품: ['cross.case', 'medkit-outline'],
+  생활용품: ['basket', 'basket-outline'],
+} as const;
+
+export function Thumb({ uri, size = 56, category }: { uri?: string; size?: number; category?: ProductCategory }) {
+  const box = { width: size, height: size, borderRadius: radius.thumb };
+  if (uri) return <Image source={{ uri }} contentFit="cover" style={[box, { backgroundColor: colors.imageBg }]} />;
+  const icon = category ? categoryIcons[category] : null;
+  return (
+    <View accessibilityLabel={category ? `${category} 사진 없음` : '사진 없음'} style={[box, { backgroundColor: icon ? colors.sub : colors.imageBg, alignItems: 'center', justifyContent: 'center' }]}>
+      {icon ? <AppIcon symbol={icon[0]} fallback={icon[1]} size={Math.round(size * 0.46)} color={colors.deep} /> : null}
+    </View>
+  );
 }
 
 const s = StyleSheet.create({
@@ -101,4 +154,8 @@ const s = StyleSheet.create({
   card: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.card, padding: 14, backgroundColor: colors.background },
   banner: { backgroundColor: colors.sub, borderRadius: radius.banner, paddingHorizontal: 18, paddingTop: 20, paddingBottom: 22, overflow: 'hidden' },
   note: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.sub, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
+  toggle: { width: 52, height: 32, borderRadius: 16, padding: 3, flexDirection: 'row' },
+  knob: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.background, ...shadow.card },
+  segmented: { flexDirection: 'row', backgroundColor: colors.sub, borderRadius: 16, padding: 4 },
+  segment: { flex: 1, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
 });

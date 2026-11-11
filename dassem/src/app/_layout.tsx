@@ -37,6 +37,7 @@ export default function RootLayout() {
         <Stack.Screen name="register" />
         <Stack.Screen name="search" />
         <Stack.Screen name="result" />
+        <Stack.Screen name="notifications" />
       </Stack>
     </>
   );

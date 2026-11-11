@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, motion, spacing, type } from '@/theme/tokens';
+import { colors, motion, shadow as shadowTokens, spacing, type } from '@/theme/tokens';
 
 const character = require('../../assets/dasseum/character.png');
 const logo = require('../../assets/dasseum/logo-mark.png');
@@ -45,7 +45,8 @@ const styles = StyleSheet.create({
   page: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 60 },
   center: { alignItems: 'center', gap: spacing['7xl'] },
   character: { width: 250, height: 201 },
-  shadow: { width: 170, height: 16, marginTop: -34, borderRadius: 999, backgroundColor: colors.text },
+  // 납작한 막대 → 가운데가 진하고 가장자리가 퍼지는 흐린 타원
+  shadow: { width: 140, height: 6, marginTop: -30, borderRadius: 999, ...shadowTokens.splash },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   logo: { width: 40, height: 38 },
   tagline: { color: colors.textSecondary, textAlign: 'center' },

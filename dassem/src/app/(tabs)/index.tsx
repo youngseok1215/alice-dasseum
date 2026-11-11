@@ -30,7 +30,7 @@ export default function HomeScreen() {
         <Text style={type.sectionTitle}>최근 AI 확인 결과</Text>
         <Pressable onPress={() => router.push({ pathname: '/result', params: { from: 'search', q: '세제' } })}>
           <Card style={styles.resultCard}>
-            <Thumb size={112} />
+            <Thumb category="생활용품" size={112} />
             <View style={styles.resultCopy}>
               <Badge text="비슷한 제품" tone="soft" />
               <Text style={type.cardTitle}>비슷한 세제가 있어요</Text>
