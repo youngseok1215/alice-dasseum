@@ -4,30 +4,24 @@
 
 이 브랜치는 기존 AI 연동 앱을 유지하면서 **별도 디자인 프런트엔드와 v5 유저플로우 차트**를 추가합니다. 두 앱의 코드는 아직 통합하지 않았습니다.
 
-## 문서 기준: dasseum_app_1113_v1.zip
+## 반영 버전: dasseum_app_1113_v1.zip
 
-이 README는 전달받은 `dasseum_app_1113_v1.zip`의 README, 패키지 구성, 스플래시·등록 완료 화면 코드를 확인하여 갱신했습니다. ZIP 자체와 그 안의 새 구현 코드는 이번 문서 수정 커밋에 포함하지 않았습니다.
+전달받은 `dasseum_app_1113_v1.zip`의 최신 프런트엔드 코드와 패키지 파일을 `dasseum/`에 반영했습니다. 기존 `dassem/`, `backend/`, 유저플로우 차트 및 Git 연습 문서는 유지합니다. README는 실제 반영 내용과 현재 제한을 설명하도록 별도로 보완했습니다.
 
-### ZIP 버전에서 확인한 변경점
+### 반영한 변경점
 
-- Expo SDK 58 / React Native 0.88 / Expo Router / TypeScript 기반
 - `react-native-reanimated` 4.7.1 및 `react-native-worklets` 0.13.0 의존성 추가
 - 스플래시: 원 확장 → 체크 그리기 → 마침표 위치로 축소·이동 → 로고·슬로건 표시 → 2초 후 홈 이동
 - 등록 완료: 체크 도장 확장·그리기 후 완료 문구 표시
-- 두 애니메이션에서 `useReducedMotion`으로 기기의 동작 줄이기 설정을 반영
+- 스플래시와 등록 완료 화면에서 `useReducedMotion`으로 기기의 동작 줄이기 설정 반영
+- 토스트의 250ms 페이드 인을 Reanimated로 전환
 - `Stamp.tsx`에 체크 선 길이와 공통 이징 정의
+- 본문 기본 글자색을 `#171719`로 정리
+- 검증 과정에서 토스트의 shared value 갱신을 `.set()`으로 변경하고, 타이머 콜백 ref 갱신을 effect로 옮겨 React 린트 규칙에 맞게 보완
 
-| 구분 | 현재 GitHub 브랜치의 디자인 코드 | 전달받은 ZIP 코드 |
-| --- | --- | --- |
-| 애니메이션 | React Native Animated 기반 | Reanimated 기반 |
-| Reanimated / Worklets | 디자인 앱의 의존성에 없음 | 의존성에 포함 |
-| 동작 줄이기 | 두 화면의 해당 대응 미반영 | 두 화면에 대응 코드 있음 |
-| API·DB | 샘플 데이터 기반 | 샘플 데이터 기반 |
-| 제품 등록 | 완료 화면 이동, 목록 추가 미연결 | 동일하게 목록 추가 미연결 |
+API·DB는 여전히 샘플 데이터 기반이며, 등록 완료 화면에서 제품을 실제 목록에 추가하는 처리는 아직 연결하지 않았습니다. ZIP의 소스 반영과 실제 AI·백엔드 통합은 별도 작업입니다.
 
-아래 실행 안내는 **현재 브랜치에 커밋된 코드**를 기준으로 합니다. ZIP 버전의 애니메이션과 패키지 변경은 후속 코드 반영 시 함께 적용해야 합니다. ZIP 실행·실기기 검증을 완료했다는 의미는 아닙니다.
-
-ZIP 문서에 언급된 `다씀 프로토타입.html`, `export/dasseum-prototype-v5.html`, `proto/screens.jsx`, `dasseum-gpt-spec.html`은 디자인·개발 기준 문서 이름이며, 이번 ZIP 안에는 포함되어 있지 않습니다.
+ZIP 문서에 언급된 `다씀 프로토타입.html`, `export/dasseum-prototype-v5.html`, `proto/screens.jsx`, `dasseum-gpt-spec.html`은 디자인·개발 기준 문서 이름이며, ZIP 안에는 포함되어 있지 않습니다.
 
 ## 브랜치 기준
 
@@ -118,7 +112,7 @@ npx.cmd expo start
 npx.cmd tsc --noEmit
 ```
 
-현재 타입 검사는 통과했습니다. 이 디자인 폴더에는 ESLint 의존성과 설정이 아직 없으므로 린트 통과 상태로 간주하지 않습니다. 모바일 실기기 검증 및 시안과의 시각 비교는 별도로 진행해야 합니다.
+최신 코드의 타입 검사와 웹 빌드가 통과했습니다. 린트는 기존 `dassem/`의 ESLint 및 Expo 설정을 재사용해 `dasseum/src`를 검사했으며 오류 없이 통과했습니다. 이 디자인 폴더 자체에는 아직 독립적인 ESLint 설정·의존성이 없습니다. 모바일 실기기 및 애니메이션의 시각 검증은 별도로 진행해야 합니다.
 
 ## 다음 통합 작업
 

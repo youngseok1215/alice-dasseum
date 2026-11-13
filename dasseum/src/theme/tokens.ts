@@ -1,8 +1,5 @@
 // 다씀 디자인 토큰 — 최신 프로토타입(다씀 프로토타입.html · proto/screens.jsx v5) 값 기준
-import { Platform, type TextStyle } from 'react-native';
-
-/** 네이티브 애니메이션 드라이버 사용 여부 (웹은 JS 애니메이션) */
-export const ND = Platform.OS !== 'web';
+import type { TextStyle } from 'react-native';
 
 export const C = {
   bg: '#F7FAF8',
@@ -14,7 +11,7 @@ export const C = {
   white: '#FFFFFF',
   dark: '#1B1C1E', // 카메라 배경
 
-  ink: '#171717', // --label-normal
+  ink: '#171719', // labelNormal (명세 1항)
   onPrimary: '#171719',
   neutral: 'rgba(46,47,51,0.88)', // --label-neutral
   alt: 'rgba(55,56,60,0.61)', // --label-alternative

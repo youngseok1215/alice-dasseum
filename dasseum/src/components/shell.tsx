@@ -2,9 +2,11 @@
 import { router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C, ND } from '@/theme/tokens';
+import { C } from '@/theme/tokens';
+import { EASE_OUT } from './Stamp';
 import { Icon, T, type IconName } from './ui';
 
 /* ---------- 내비게이션 (프로토타입 go/back/reset 대응) ---------- */
@@ -27,11 +29,13 @@ const TABBED = ['/home', '/check', '/items'];
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [msg, setMsg] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const opacity = useRef(new Animated.Value(0)).current;
+  const opacity = useSharedValue(0);
+  const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
   const toast = useCallback((m: string) => {
     setMsg(m);
-    opacity.setValue(0);
-    Animated.timing(opacity, { toValue: 1, duration: 250, easing: Easing.bezier(0.2, 0, 0, 1), useNativeDriver: ND }).start();
+    // .dsm-fade: 250ms 페이드 인
+    opacity.set(0);
+    opacity.set(withTiming(1, { duration: 250, easing: EASE_OUT }));
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setMsg(null), 2000);
   }, [opacity]);
@@ -44,7 +48,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastCtx.Provider value={toast}>
       {children}
       {msg && (
-        <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 20, right: 20, bottom, opacity, zIndex: 50 }}>
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 20, right: 20, bottom, zIndex: 50 }, fade]}>
           <View style={{ minHeight: 54, borderRadius: 12, overflow: 'hidden', paddingVertical: 11, paddingLeft: 26, paddingRight: 16, justifyContent: 'center' }}>
             {/* Wanted Toast: backdrop blur(64px) + #1B1C1E 52% + 민트 5% — 블러된 밝은 배경을 단색으로 근사 */}
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(247,250,248,0.94)' }]} />
@@ -108,6 +112,6 @@ export function BottomNav({ active }: { active: TabKey }) {
 /** 마운트 후 일정 시간 뒤 실행 (언마운트 시 취소) */
 export function useTimeout(fn: () => void, ms: number) {
   const ref = useRef(fn);
-  ref.current = fn;
+  useEffect(() => { ref.current = fn; }, [fn]);
   useEffect(() => { const t = setTimeout(() => ref.current(), ms); return () => clearTimeout(t); }, [ms]);
 }
