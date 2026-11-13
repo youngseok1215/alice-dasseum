@@ -7,12 +7,18 @@ export type Product = {
   name: string;
   brand?: string;
   category: ProductCategory;
-  openedAt?: string;
-  expiresAt?: string;
+  openedAt: string | null;
+  expiresAt: string | null;
   imageUri?: string;
-  quantity: number;
+  quantity?: number;
   daysLeft?: number;
-  createdAt: string;
+  dday?: number | null;
+  createdAt?: string;
+  registeredAt: string;
+  memo?: string;
+  status: 'owned' | 'done';
+  completedAt?: string | null;
+  recommendReason?: string;
 };
 
 export type ProductMatch = Product & { match: 'same' | 'similar' };

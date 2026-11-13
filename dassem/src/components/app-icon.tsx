@@ -6,6 +6,8 @@ import { Platform, type ColorValue } from 'react-native';
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
 export function AppIcon({ symbol, fallback, size, color }: { symbol: SymbolViewProps['name']; fallback: IoniconName; size: number; color: ColorValue }) {
-  if (Platform.OS === 'ios') return <SymbolView name={symbol} tintColor={color} size={size} />;
-  return <Ionicons name={fallback} color={color} size={size} />;
+  const tintColor = color === null || typeof color === 'number' ? undefined : color;
+
+  if (Platform.OS === 'ios') return <SymbolView name={symbol} tintColor={tintColor} size={size} />;
+  return <Ionicons name={fallback} color={tintColor} size={size} />;
 }

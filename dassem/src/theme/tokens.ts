@@ -3,14 +3,16 @@ import { Platform, TextStyle, ViewStyle } from 'react-native';
 
 export const colors = {
   // 대표 팔레트
-  primary: '#36B7AB',        // 메인: 주요 버튼, 로고, 선택된 메뉴
-  primaryPressed: '#2FA79C', // 메인 버튼 눌림
-  sub: '#E7F7F4',            // 서브: 카드/배너 배경, 검색 결과 강조
-  subPressed: '#D9F2EE',
-  subStrong: '#C9EEE8',      // 'AI 물품 도우미' 배지 배경
-  deep: '#218C82',           // 진한 민트: 보유 중, 활성 탭, 강조 텍스트
-  background: '#FFFFFF',
-  text: '#263B3A',
+  primary: '#7ED8C8',
+  primaryPressed: '#67CABB',
+  sub: '#D9EFE9',
+  subPressed: '#CBE8E1',
+  subStrong: '#BDE5DB',
+  deep: '#3EB6A6',
+  background: '#F7FAF8',
+  surface: '#FFFFFF',
+  cream: '#F2EDE5',
+  text: '#171719',
 
   // 보조(중립)
   textSecondary: '#4E6361',  // 설명 문구
@@ -31,13 +33,13 @@ export const colors = {
   rank: ['#218C82', '#36B7AB', '#6FCBC2', '#B8C6C4'],
 
   toastBg: '#263B3A',
-  onPrimary: '#FFFFFF',
+  onPrimary: '#171719',
 } as const;
 
 export const spacing = { xxs: 2, xs: 4, sm: 6, md: 8, lg: 10, xl: 12, '2xl': 14, '3xl': 16, '4xl': 18, '5xl': 20, '6xl': 24, '7xl': 28 } as const;
 
 // 화면 좌우 여백 16, 카드 내부 14~20, 요소 간 간격 8~14
-export const layout = { screenPaddingH: 16, sectionGap: 14, headerHeight: 48, tabBarHeight: 84, minTouch: 44 } as const;
+export const layout = { screenPaddingH: 20, sectionGap: 16, headerHeight: 52, tabBarHeight: 76, minTouch: 44 } as const;
 
 export const radius = { tag: 6, badge: 12, chip: 19, input: 18, button: 18, card: 20, banner: 24, thumb: 14, pill: 999 } as const;
 
@@ -91,7 +93,7 @@ export const shadow = {
 } as const;
 
 export const motion = {
-  splashDuration: 2600,   // 로딩 → 홈 자동 이동(ms), 탭하면 즉시 이동
+  splashDuration: 1800,   // 로딩 → 홈 자동 이동(ms), 탭하면 즉시 이동
   bobDuration: 1800,      // 캐릭터 위아래 흔들림 1회(ms), translateY 0 → -12, rotate -1.5° ↔ 1.5°
   dotDuration: 1200,      // 로딩 점 3개, 0.16s 간격
   scanDuration: 1600,     // AI 인식 스캔 시간(ms)

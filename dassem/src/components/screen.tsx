@@ -29,7 +29,7 @@ export function TopBar({ title }: { title: string }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { flexGrow: 1, alignItems: 'center', paddingBottom: 28 },
-  content: { width: '100%', maxWidth: Platform.OS === 'web' ? 430 : undefined, paddingHorizontal: layout.screenPaddingH },
+  content: { width: '100%', maxWidth: Platform.OS === 'web' ? 375 : undefined, paddingHorizontal: layout.screenPaddingH },
   topBar: { height: layout.headerHeight, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: layout.minTouch, height: layout.minTouch, alignItems: 'center', justifyContent: 'center' },
   backText: { ...type.screenTitle, fontSize: 34, lineHeight: 38, color: colors.text },

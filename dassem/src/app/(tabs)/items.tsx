@@ -1,32 +1,13 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-
-import { Screen } from '@/components/screen';
-import { mockProducts, productStatus } from '@/data/mock-products';
-import { AiNote, CategoryTag, Chip, StatusTag, Thumb } from '@/theme/components';
-import { colors, radius, spacing, type } from '@/theme/tokens';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppIcon } from '@/components/app-icon';
+import { Screen } from '@/components/screen';
+import { useAppStore } from '@/data/app-store';
+import type { Product } from '@/types/product';
+import { colors, fonts, type } from '@/theme/tokens';
 const categories = ['전체', '화장품', '영양제', '의약품', '생활용품'] as const;
-
-export default function ItemsScreen() {
-  const [category, setCategory] = useState<(typeof categories)[number]>('전체');
-  const items = useMemo(() => mockProducts.filter((item) => category === '전체' || item.category === category).toSorted((a, b) => (a.daysLeft ?? 9999) - (b.daysLeft ?? 9999)), [category]);
-  return <Screen>
-    <View style={styles.header}><Text style={type.screenTitle}>내 물품</Text><Text style={[type.bodySm, styles.muted]}>보유 {mockProducts.length}개</Text></View>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{categories.map((item) => <Chip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}</ScrollView>
-    <AiNote eyebrow="AI 사용 순서 추천" text="유통기한이 짧거나 먼저 개봉한 제품부터 써요" />
-    <View style={styles.list}>{items.map((item, index) => <View key={item.id} style={styles.item}>
-      <View style={[styles.rank, { backgroundColor: colors.rank[Math.min(index, 3)] }]}><Text style={styles.rankText}>{index + 1}</Text></View>
-      <Thumb uri={item.imageUri} category={item.category} size={52} />
-      <View style={styles.copy}><Text style={type.itemName}>{item.name}</Text><View style={styles.tags}><CategoryTag text={item.category} /><StatusTag text={productStatus(item)} isExpiry={Boolean(item.expiresAt)} daysLeft={item.daysLeft ?? 999} /></View></View>
-    </View>)}</View>
-  </Screen>;
-}
-
-const styles = StyleSheet.create({
-  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, muted: { color: colors.textTertiary },
-  chips: { gap: 8, paddingBottom: 14 }, list: { marginTop: spacing['2xl'], gap: spacing.md },
-  item: { minHeight: 82, borderWidth: 1, borderColor: colors.border, borderRadius: radius.input, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, backgroundColor: colors.background },
-  rank: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, rankText: { ...type.tag, color: colors.onPrimary, fontFamily: 'Pretendard-Bold' },
-  copy: { flex: 1, gap: 6 }, tags: { flexDirection: 'row', gap: 5, flexWrap: 'wrap' },
-});
+function Tag({ text, tone = 'mint' }: { text: string; tone?: 'mint'|'warn'|'danger'|'neutral' }) { return <View style={[styles.tag, tone === 'warn' && styles.tagWarn, tone === 'danger' && styles.tagDanger, tone === 'neutral' && styles.tagNeutral]}><Text style={[styles.tagText, tone === 'warn' && styles.warnText, tone === 'danger' && styles.dangerText, tone === 'neutral' && styles.neutralText]}>{text}</Text></View>; }
+function ItemRow({ product, last }: { product: Product; last?: boolean }) { const deadline = product.dday == null ? <Tag text="기한 미입력" tone="neutral" /> : product.dday < 0 ? <Tag text="기한 지남" tone="danger" /> : product.dday <= 30 ? <Tag text={`D-${product.dday}`} tone="warn" /> : <Tag text={`D-${product.dday}`} tone="neutral" />; return <Pressable onPress={() => router.push({ pathname: '/product/[id]', params: { id: product.id } })} style={[styles.item, last && styles.lastItem]}><View style={styles.thumb}><AppIcon symbol="photo" fallback="image-outline" size={22} color="rgba(55,56,60,.45)" /></View><View style={styles.itemCopy}><Text numberOfLines={1} style={styles.itemName}>{product.name}</Text><View style={styles.tags}><Tag text={product.category} />{deadline}{!product.openedAt && <Tag text="미개봉" tone="neutral" />}</View></View><AppIcon symbol="chevron.right" fallback="chevron-forward" size={20} color={colors.textSecondary} /></Pressable>; }
+export default function ItemsScreen() { const [category,setCategory]=useState<(typeof categories)[number]>('전체'); const { products }=useAppStore(); const all=useMemo(()=>products.toSorted((a,b)=>(a.dday??1e9)-(b.dday??1e9)),[products]); const items=category==='전체'?all:all.filter((p)=>p.category===category); return <Screen><View style={styles.heading}><Text style={styles.title}>내 제품 목록</Text><Text style={styles.subtitle}>보유 제품 {all.length}개 · 사용기한 임박순</Text></View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{categories.map((c)=>{const count=c==='전체'?all.length:all.filter((p)=>p.category===c).length; const active=c===category; return <Pressable key={c} onPress={()=>setCategory(c)} style={[styles.chip,active&&styles.chipActive]}><Text style={[styles.chipText,active&&styles.chipTextActive]}>{c}</Text><Text style={[styles.chipCount,active&&styles.chipTextActive]}>{count}</Text></Pressable>;})}</ScrollView><View>{items.map((p,i)=><ItemRow key={p.id} product={p} last={i===items.length-1} />)}</View></Screen>; }
+const styles=StyleSheet.create({ heading:{paddingTop:16}, title:{...type.screenTitle,fontSize:24,lineHeight:32,fontFamily:fonts.bold}, subtitle:{...type.bodySm,color:colors.textSecondary,fontFamily:fonts.medium,marginTop:4}, chips:{gap:8,paddingTop:16,paddingBottom:8}, chip:{height:36,paddingHorizontal:14,borderRadius:999,backgroundColor:colors.surface,borderWidth:1,borderColor:'#D7DBD9',flexDirection:'row',alignItems:'center',gap:4}, chipActive:{backgroundColor:colors.primary,borderColor:colors.primary}, chipText:{...type.bodySm,fontFamily:fonts.semibold,color:colors.textSecondary}, chipTextActive:{color:colors.text,fontFamily:fonts.bold}, chipCount:{...type.caption,color:colors.textSecondary,fontFamily:fonts.semibold}, item:{minHeight:88,flexDirection:'row',alignItems:'center',gap:14,paddingVertical:14,borderBottomWidth:1,borderBottomColor:colors.divider}, lastItem:{borderBottomWidth:0}, thumb:{width:60,height:60,borderRadius:14,backgroundColor:colors.cream,borderWidth:1,borderColor:colors.divider,alignItems:'center',justifyContent:'center'}, itemCopy:{flex:1}, itemName:{...type.body,fontFamily:fonts.semibold}, tags:{flexDirection:'row',flexWrap:'wrap',gap:6,marginTop:6}, tag:{minHeight:22,paddingHorizontal:7,borderRadius:6,backgroundColor:colors.sub,justifyContent:'center'}, tagWarn:{backgroundColor:'#FFF1E0'}, tagDanger:{backgroundColor:colors.dangerBg}, tagNeutral:{backgroundColor:colors.surfaceMuted}, tagText:{...type.tag,fontFamily:fonts.semibold}, warnText:{color:'#8F4500'}, dangerText:{color:colors.danger}, neutralText:{color:colors.textSecondary} });

@@ -30,13 +30,11 @@ export default function RootLayout() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: colors.background },
+          animation: 'fade',
         }}
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="search" />
-        <Stack.Screen name="result" />
         <Stack.Screen name="notifications" />
       </Stack>
     </>
