@@ -3,6 +3,31 @@
 Claude Design 시안(최신 프로토타입 v5: `다씀 프로토타입.html`, `proto/screens.jsx`)을 **Expo + React Native**로 옮긴 앱입니다.
 화면 구성, 수치, 문구, 화면 이동, 상태 변화를 프로토타입과 같게 맞췄고, API와 DB 자리는 목업 데이터로 비워 두었습니다.
 
+## 문서 기준: dasseum_app_1113_v1.zip
+
+이 README는 전달받은 `dasseum_app_1113_v1.zip`의 README, 패키지 구성, 스플래시·등록 완료 화면 코드를 확인하여 갱신했습니다. ZIP 자체와 그 안의 새 구현 코드는 이번 문서 수정 커밋에 포함하지 않았습니다.
+
+### ZIP 버전에서 확인한 변경점
+
+- Expo SDK 58 / React Native 0.88 / Expo Router / TypeScript 기반
+- `react-native-reanimated` 4.7.1 및 `react-native-worklets` 0.13.0 의존성 추가
+- 스플래시: 원 확장 → 체크 그리기 → 마침표 위치로 축소·이동 → 로고·슬로건 표시 → 2초 후 홈 이동
+- 등록 완료: 체크 도장 확장·그리기 후 완료 문구 표시
+- 두 애니메이션에서 `useReducedMotion`으로 기기의 동작 줄이기 설정을 반영
+- `Stamp.tsx`에 체크 선 길이와 공통 이징 정의
+
+| 구분 | 현재 GitHub 브랜치의 디자인 코드 | 전달받은 ZIP 코드 |
+| --- | --- | --- |
+| 애니메이션 | React Native Animated 기반 | Reanimated 기반 |
+| Reanimated / Worklets | 디자인 앱의 의존성에 없음 | 의존성에 포함 |
+| 동작 줄이기 | 두 화면의 해당 대응 미반영 | 두 화면에 대응 코드 있음 |
+| API·DB | 샘플 데이터 기반 | 샘플 데이터 기반 |
+| 제품 등록 | 완료 화면 이동, 목록 추가 미연결 | 동일하게 목록 추가 미연결 |
+
+아래 실행 안내는 **현재 브랜치에 커밋된 코드**를 기준으로 합니다. ZIP 버전의 애니메이션과 패키지 변경은 후속 코드 반영 시 함께 적용해야 합니다. ZIP 실행·실기기 검증을 완료했다는 의미는 아닙니다.
+
+ZIP 문서에 언급된 `다씀 프로토타입.html`, `export/dasseum-prototype-v5.html`, `proto/screens.jsx`, `dasseum-gpt-spec.html`은 디자인·개발 기준 문서 이름이며, 이번 ZIP 안에는 포함되어 있지 않습니다.
+
 ## 실행
 
 ```bash
@@ -12,7 +37,7 @@ npx expo start --web    # 브라우저에서 바로 확인 (폭 375px로 보면 
 ```
 
 - Expo SDK 58 / React Native 0.88 / expo-router 기반입니다. 휴대폰에는 **최신 Expo Go**를 설치해 주세요.
-- 사용한 네이티브 모듈은 모두 Expo Go에 포함되어 있어서 별도 빌드 없이 바로 실행됩니다.
+- Expo Go는 프로젝트의 SDK 및 네이티브 모듈과 호환되는 버전으로 실행하고, 실제 기기에서 호환성을 확인하세요.
 - 처음 상태로 되돌리려면 앱 데이터를 지우세요(웹은 localStorage 삭제). 상태는 AsyncStorage `dasseum-app-v1` 키에 저장됩니다.
 
 ## 화면 ↔ 파일
@@ -80,3 +105,9 @@ src/
 
 - 본문: Pretendard (SIL OFL) · `assets/fonts/Pretendard-*.otf`
 - 로고 · 스플래시: The Jamsil (송파구 무료 글꼴, 시안 프로젝트에 포함된 라이선스 참고) · `assets/fonts/TheJamsil-*.ttf`
+
+## 유저플로우
+
+![다씀 v5 유저플로우](../dassum_userflow_v5.png)
+
+[유저플로우 원본](../dassum_userflow_v5.png) · [프로젝트 및 브랜치 안내](../README.md)
