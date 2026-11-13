@@ -26,6 +26,7 @@ export function useAppStore() { return useSyncExternalStore((listener) => { list
 export function addProduct(product: Product) {
   update({ ...state, products: [product, ...state.products.filter((item) => item.id !== product.id)] });
 }
+export function replaceProducts(products: Product[]) { update({ ...state, products }); }
 export function addRecent(query: string) { update({ ...state, recent: [query, ...state.recent.filter((v) => v !== query)].slice(0, 5) }); }
 export function removeRecent(query: string) { update({ ...state, recent: state.recent.filter((v) => v !== query) }); }
 export function holdPurchase(name: string) { update({ ...state, holds: [{ id: String(Date.now()), name, createdAt: '2026-11-12' }, ...state.holds] }); }

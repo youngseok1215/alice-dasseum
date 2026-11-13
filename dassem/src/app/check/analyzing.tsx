@@ -29,6 +29,7 @@ export default function AnalyzingScreen() {
         setError('제품명을 읽지 못했어요. 제품 이름이 잘 보이게 다시 찍어 주세요.');
         return;
       }
+      if (purpose !== 'register') clearRecognitionPhoto(image);
       router.replace({
         pathname: '/check/result',
         params: {
@@ -46,7 +47,6 @@ export default function AnalyzingScreen() {
 
     return () => {
       controller.abort();
-      clearRecognitionPhoto(image);
     };
   }, [image, mode, photo, purpose, q]);
 

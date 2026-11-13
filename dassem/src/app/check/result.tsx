@@ -38,7 +38,7 @@ export default function ResultScreen() {
 
   if (purpose === 'register') {
     return <SafeAreaView style={styles.safe}><View style={styles.screen}><View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.topButton}><AppIcon symbol="chevron.left" fallback="chevron-back" size={24} color={colors.text} /></Pressable><Text style={styles.topTitle}>AI 인식 완료</Text><View style={styles.topButton} /></View><ScrollView contentContainerStyle={styles.content}><View style={styles.queryBar}><AppIcon symbol="camera" fallback="camera-outline" size={18} color={colors.textSecondary} /><Text style={styles.queryText}>촬영한 사진에서 정보를 찾았어요</Text></View><View style={styles.badgeMint}><Text style={styles.badgeText}>인식 완료</Text></View><Text style={styles.title}>제품 정보를 찾았어요</Text><Text style={styles.sub}>인식한 내용을 확인해 주세요.</Text><View style={styles.productCard}><Text style={styles.fieldLabel}>제품명</Text><Text style={styles.productName}>{q}</Text><View style={styles.divider} /><Text style={styles.fieldLabel}>카테고리</Text><Text style={styles.value}>{category || '확인 불가'}</Text><View style={styles.divider} /><Text style={styles.fieldLabel}>유통기한</Text><Text style={styles.value}>{expiresAt || '확인 불가'}</Text></View></ScrollView><View style={styles.actions}><Button label="등록 정보 확인" onPress={() => router.replace({
-      pathname: '/register', params: { name: q, category: category ?? '', expiresAt: expiresAt ?? '' },
+      pathname: '/register', params: { name: q, brand: brand ?? '', category: category ?? '', expiresAt: expiresAt ?? '', fromPhoto: '1' },
     })} /></View></View></SafeAreaView>;
   }
 
