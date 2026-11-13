@@ -3,11 +3,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/app-icon';
+import { useAppStore } from '@/data/app-store';
 import { colors, fonts, type } from '@/theme/tokens';
 
 type Verdict = 'same' | 'similar' | 'none';
-function verdictFor(query: string, mode: string): Verdict {
-  if (mode === 'photo') return 'same';
+function verdictFor(query: string): Verdict {
   const normalized = query.toLowerCase().replace(/\s/g, '');
   if (/2000/.test(normalized) && /비타민d|vitamind/.test(normalized)) return 'similar';
   if (/비타민d|vitamind|비타민디/.test(normalized)) return 'same';
@@ -18,33 +18,44 @@ function Button({ label, outline, onPress }: { label: string; outline?: boolean;
   return <Pressable onPress={onPress} style={[styles.button, outline && styles.buttonOutline]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
 }
 
+const normalize = (value: string) => value.normalize('NFKC').toLowerCase().replace(/\s/g, '');
+
 export default function ResultScreen() {
-  const { q = '제품', purpose = 'check', mode = 'search' } = useLocalSearchParams<{ q?: string; purpose?: string; mode?: string }>();
-  const verdict = verdictFor(q, mode);
-  const hasProduct = verdict !== 'none';
+  const { q = '제품', purpose = 'check', mode = 'search', brand, category, expiresAt } =
+    useLocalSearchParams<{ q?: string; purpose?: string; mode?: string; brand?: string; category?: string; expiresAt?: string }>();
+  const { products } = useAppStore();
+  const photo = mode === 'photo';
+  const sampleVerdict = photo ? 'none' : verdictFor(q);
+  const match = photo
+    ? products.find((product) => normalize(product.name) === normalize(q) &&
+        (!brand || !product.brand || normalize(product.brand) === normalize(brand)))
+    : products.find((product) => sampleVerdict !== 'none' && product.id === 'vitd');
+  const verdict = match ? (photo ? 'same' : sampleVerdict) : 'none';
   const title = verdict === 'same' ? '이미 가지고 있어요' : verdict === 'similar' ? '비슷한 제품이 있어요' : '가지고 있는 제품이 없어요';
-  const sub = verdict === 'same' ? '내 물품에 같은 제품이 1개 있어요.' : verdict === 'similar' ? '같은 브랜드의 다른 용량 제품이에요.' : `내 물품에서 ‘${q}’과 같거나 비슷한 제품을 찾지 못했어요.`;
+  const sub = verdict === 'same' ? '내 물품에 같은 제품이 1개 있어요.' : verdict === 'similar' ? '같은 브랜드의 다른 용량 제품이에요.' : photo ? `내 물품에서 ‘${q}’과 이름이 같은 제품을 찾지 못했어요.` : `내 물품에서 ‘${q}’과 같거나 비슷한 제품을 찾지 못했어요.`;
   const badge = verdict === 'same' ? '동일 제품 있음' : verdict === 'similar' ? '유사 제품 있음' : '보유 제품 없음';
   const finish = () => router.replace('/(tabs)/check');
 
   if (purpose === 'register') {
-    return <SafeAreaView style={styles.safe}><View style={styles.screen}><View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.topButton}><AppIcon symbol="chevron.left" fallback="chevron-back" size={24} color={colors.text} /></Pressable><Text style={styles.topTitle}>AI 인식 완료</Text><View style={styles.topButton} /></View><ScrollView contentContainerStyle={styles.content}><View style={styles.queryBar}><AppIcon symbol="camera" fallback="camera-outline" size={18} color={colors.textSecondary} /><Text style={styles.queryText}>촬영한 사진에서 정보를 찾았어요</Text></View><View style={styles.badgeMint}><Text style={styles.badgeText}>인식 완료</Text></View><Text style={styles.title}>비타민D 정보를 찾았어요</Text><Text style={styles.sub}>제품명과 카테고리를 자동으로 입력했어요.</Text><View style={styles.productCard}><Text style={styles.fieldLabel}>제품명</Text><Text style={styles.productName}>비타민D 2000IU</Text><View style={styles.divider} /><Text style={styles.fieldLabel}>카테고리</Text><Text style={styles.value}>영양제</Text><View style={styles.divider} /><Text style={styles.fieldLabel}>유통기한</Text><Text style={styles.value}>2027-11-12</Text></View></ScrollView><View style={styles.actions}><Button label="등록 완료" onPress={() => router.replace('/(tabs)/items')} /></View></View></SafeAreaView>;
+    return <SafeAreaView style={styles.safe}><View style={styles.screen}><View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.topButton}><AppIcon symbol="chevron.left" fallback="chevron-back" size={24} color={colors.text} /></Pressable><Text style={styles.topTitle}>AI 인식 완료</Text><View style={styles.topButton} /></View><ScrollView contentContainerStyle={styles.content}><View style={styles.queryBar}><AppIcon symbol="camera" fallback="camera-outline" size={18} color={colors.textSecondary} /><Text style={styles.queryText}>촬영한 사진에서 정보를 찾았어요</Text></View><View style={styles.badgeMint}><Text style={styles.badgeText}>인식 완료</Text></View><Text style={styles.title}>제품 정보를 찾았어요</Text><Text style={styles.sub}>인식한 내용을 확인해 주세요.</Text><View style={styles.productCard}><Text style={styles.fieldLabel}>제품명</Text><Text style={styles.productName}>{q}</Text><View style={styles.divider} /><Text style={styles.fieldLabel}>카테고리</Text><Text style={styles.value}>{category || '확인 불가'}</Text><View style={styles.divider} /><Text style={styles.fieldLabel}>유통기한</Text><Text style={styles.value}>{expiresAt || '확인 불가'}</Text></View></ScrollView><View style={styles.actions}><Button label="등록 정보 확인" onPress={() => router.replace({
+      pathname: '/register', params: { name: q, category: category ?? '', expiresAt: expiresAt ?? '' },
+    })} /></View></View></SafeAreaView>;
   }
 
   return <SafeAreaView style={styles.safe}><View style={styles.screen}>
     <View style={styles.topBar}><Pressable accessibilityLabel="뒤로가기" onPress={() => router.back()} style={styles.topButton}><AppIcon symbol="chevron.left" fallback="chevron-back" size={24} color={colors.text} /></Pressable><Text style={styles.topTitle}>확인 결과</Text><View style={styles.topButton} /></View>
     <ScrollView contentContainerStyle={styles.content}>
-      <View style={styles.queryBar}><AppIcon symbol={mode === 'photo' ? 'camera' : 'magnifyingglass'} fallback={mode === 'photo' ? 'camera-outline' : 'search'} size={18} color={colors.textSecondary} /><Text style={styles.queryText}>{mode === 'photo' ? '촬영한 사진으로 확인했어요' : `‘${q}’ 확인 결과`}</Text></View>
+      <View style={styles.queryBar}><AppIcon symbol={mode === 'photo' ? 'camera' : 'magnifyingglass'} fallback={mode === 'photo' ? 'camera-outline' : 'search'} size={18} color={colors.textSecondary} /><Text style={styles.queryText}>{`‘${q}’ 확인 결과`}</Text></View>
       <View style={[styles.badge, verdict === 'similar' && styles.badgeMint, verdict === 'none' && styles.badgeOk]}><Text style={[styles.badgeText, verdict === 'none' && styles.badgeOkText]}>{badge}</Text></View>
       <Text style={styles.title}>{title}</Text><Text style={styles.sub}>{sub}</Text>
-      {hasProduct && <View style={styles.productCard}>
-        <View style={styles.productTop}><View style={styles.productImage}><AppIcon symbol="photo" fallback="image-outline" size={26} color="rgba(55,56,60,.45)" /></View><View style={styles.productCopy}><Text style={styles.brand}>온데이 · 영양제</Text><Text style={styles.productName}>온데이 비타민D3 1000IU 90정</Text>{verdict === 'similar' && <Text style={styles.difference}>확인한 제품과 용량이 달라요 (1000IU · 2000IU)</Text>}</View></View>
-        <View style={styles.detailGrid}><View style={styles.detailLine}><Text style={styles.fieldLabel}>개봉일</Text><Text style={styles.detailValue}>2026.09.03 개봉</Text></View><View style={styles.detailLine}><Text style={styles.fieldLabel}>사용기한</Text><View style={styles.expiryRow}><Text style={styles.detailValue}>2027.06.30</Text><View style={styles.neutralBadge}><Text style={styles.neutralText}>D-230</Text></View></View></View></View>
-        <Pressable onPress={() => router.push({ pathname: '/product/[id]', params: { id: 'vitd' } })} style={styles.detailButton}><Text style={styles.detailButtonText}>보유 제품 상세 보기</Text></Pressable>
+      {match && <View style={styles.productCard}>
+        <View style={styles.productTop}><View style={styles.productImage}><AppIcon symbol="photo" fallback="image-outline" size={26} color="rgba(55,56,60,.45)" /></View><View style={styles.productCopy}><Text style={styles.brand}>{[match.brand, match.category].filter(Boolean).join(' · ')}</Text><Text style={styles.productName}>{match.name}</Text>{verdict === 'similar' && <Text style={styles.difference}>확인한 제품과 용량이 달라요 (1000IU · 2000IU)</Text>}</View></View>
+        <View style={styles.detailGrid}><View style={styles.detailLine}><Text style={styles.fieldLabel}>개봉일</Text><Text style={styles.detailValue}>{match.openedAt ?? '미개봉'}</Text></View><View style={styles.detailLine}><Text style={styles.fieldLabel}>사용기한</Text><View style={styles.expiryRow}><Text style={styles.detailValue}>{match.expiresAt ?? '미입력'}</Text>{match.dday != null && <View style={styles.neutralBadge}><Text style={styles.neutralText}>{match.dday < 0 ? `D+${-match.dday}` : `D-${match.dday}`}</Text></View>}</View></View></View>
+        <Pressable onPress={() => router.push({ pathname: '/product/[id]', params: { id: match.id } })} style={styles.detailButton}><Text style={styles.detailButtonText}>보유 제품 상세 보기</Text></Pressable>
       </View>}
-      <View style={styles.notice}><AppIcon symbol="info.circle" fallback="information-circle-outline" size={18} color={colors.textSecondary} /><Text style={styles.noticeText}>AI 확인 결과는 참고용이에요. 실제 제품을 확인해 주세요.{hasProduct && `\n영양제·의약품의 효능이나 대체 가능 여부는 안내하지 않아요.`}</Text></View>
+      <View style={styles.notice}><AppIcon symbol="info.circle" fallback="information-circle-outline" size={18} color={colors.textSecondary} /><Text style={styles.noticeText}>AI 확인 결과는 참고용이에요. 실제 제품을 확인해 주세요.{match && `\n영양제·의약품의 효능이나 대체 가능 여부는 안내하지 않아요.`}</Text></View>
     </ScrollView>
-    <View style={styles.actions}>{verdict === 'none' ? <><Button label="확인 완료" onPress={finish} /><Button label="다시 확인하기" outline onPress={finish} /></> : <><Button label="구매 보류" onPress={() => router.replace({ pathname: '/check/held', params: { q, id: 'vitd' } })} /><Button label="그래도 구매할게요" outline onPress={finish} /></>}</View>
+    <View style={styles.actions}>{!match ? <><Button label="확인 완료" onPress={finish} /><Button label="다시 확인하기" outline onPress={finish} /></> : <><Button label="구매 보류" onPress={() => router.replace({ pathname: '/check/held', params: { q, id: match.id } })} /><Button label="그래도 구매할게요" outline onPress={finish} /></>}</View>
   </View></SafeAreaView>;
 }
 

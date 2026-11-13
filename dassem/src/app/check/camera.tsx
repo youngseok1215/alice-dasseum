@@ -1,14 +1,53 @@
+import * as ImagePicker from 'expo-image-picker';
+import { useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { setRecognitionPhoto } from '@/api/product-vision';
 import { AppIcon } from '@/components/app-icon';
 import { fonts, type } from '@/theme/tokens';
 
 export default function CameraScreen() {
   const { purpose = 'check' } = useLocalSearchParams<{ purpose?: string }>();
   const register = purpose === 'register';
-  const shoot = () => router.replace({ pathname: '/check/analyzing', params: { q: register ? '비타민D 2000IU' : '촬영한 사진', purpose, mode: 'photo' } });
+  const opening = useRef(false);
+  const [error, setError] = useState('');
+
+  const pickPhoto = async (camera: boolean) => {
+    if (opening.current) return;
+    opening.current = true;
+    setError('');
+    try {
+      if (camera && Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setError('카메라 권한을 허용하거나 앨범에서 사진을 선택해 주세요.');
+          return;
+        }
+      }
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.7, base64: true };
+      const result = await (camera && Platform.OS !== 'web'
+        ? ImagePicker.launchCameraAsync(options)
+        : ImagePicker.launchImageLibraryAsync(options));
+      if (result.canceled) return;
+      const { base64 } = result.assets[0];
+      if (!base64) {
+        setError('사진을 읽을 수 없어요. 다른 사진을 선택해 주세요.');
+        return;
+      }
+      if (base64.length > 5 * 1024 * 1024 - 128) {
+        setError('사진이 너무 커요. 더 작은 사진으로 시도해 주세요.');
+        return;
+      }
+      setRecognitionPhoto(`data:image/jpeg;base64,${base64}`);
+      router.push({ pathname: '/check/analyzing', params: { purpose, mode: 'photo' } });
+    } catch {
+      setError('사진을 열 수 없어요. 다시 시도해 주세요.');
+    } finally {
+      opening.current = false;
+    }
+  };
   return <SafeAreaView style={styles.safe}><View style={styles.screen}>
     <View style={styles.header}>
       <Pressable accessibilityLabel="닫기" onPress={() => router.back()} style={styles.headerButton}><AppIcon symbol="xmark" fallback="close" size={25} color="#FFFFFF" /></Pressable>
@@ -17,13 +56,14 @@ export default function CameraScreen() {
     <View style={styles.cameraBody}>
       <View style={styles.guideFrame}>
         <View style={[styles.corner, styles.topLeft]} /><View style={[styles.corner, styles.topRight]} /><View style={[styles.corner, styles.bottomLeft]} /><View style={[styles.corner, styles.bottomRight]} />
-        <View style={styles.preview}><AppIcon symbol="photo" fallback="image-outline" size={28} color="rgba(255,255,255,.7)" /><Text style={styles.previewText}>카메라 미리보기</Text></View>
+        <View style={styles.preview}><AppIcon symbol="photo" fallback="image-outline" size={28} color="rgba(255,255,255,.7)" /><Text style={styles.previewText}>촬영 또는 앨범 선택</Text></View>
       </View>
       <Text style={styles.guideText}>제품 이름이 잘 보이게 찍어주세요</Text>
+      {error !== '' && <Text accessibilityRole="alert" style={styles.guideText}>{error}</Text>}
     </View>
     <View style={styles.controls}>
-      <Pressable accessibilityLabel="앨범에서 선택" onPress={shoot} style={styles.album}><AppIcon symbol="photo" fallback="image-outline" size={24} color="#FFFFFF" /></Pressable>
-      <Pressable accessibilityLabel="촬영" onPress={shoot} style={styles.shutterOuter}><View style={styles.shutter} /></Pressable><View style={styles.albumSpacer} />
+      <Pressable accessibilityLabel="앨범에서 선택" onPress={() => void pickPhoto(false)} style={styles.album}><AppIcon symbol="photo" fallback="image-outline" size={24} color="#FFFFFF" /></Pressable>
+      <Pressable accessibilityLabel="촬영" onPress={() => void pickPhoto(true)} style={styles.shutterOuter}><View style={styles.shutter} /></Pressable><View style={styles.albumSpacer} />
     </View>
   </View></SafeAreaView>;
 }

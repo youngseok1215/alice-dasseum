@@ -68,5 +68,5 @@ export function useSettings() {
 
 // "D-30, D-7" 처럼 큰 수부터
 export function formatExpiryDays(days: number[]) {
-  return days.toSorted((a, b) => b - a).map((d) => `D-${d}`).join(', ');
+  return [...days].sort((a, b) => b - a).map((d) => `D-${d}`).join(', ');
 }
