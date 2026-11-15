@@ -5,7 +5,7 @@ Claude Design 시안(최신 프로토타입 v5: `다씀 프로토타입.html`, `
 
 ## v5 화면에 AI·DB 기능 이식 중
 
-`feature/design-v5-ai-db-flow` 작업 브랜치에서는 기존 `dassem/`과 `backend/`의 기능을
+`feature/design-back-v5-1115` 작업 브랜치에서는 기존 `dassem/`과 `backend/`의 기능을
 이 v5 화면에 옮기고 있습니다. 이 화면을 최종 프론트로 확정한 것은 아니며, 기능 결합을 검증하기 위한 작업입니다.
 
 현재 연결된 흐름:
