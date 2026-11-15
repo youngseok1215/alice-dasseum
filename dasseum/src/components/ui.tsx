@@ -123,11 +123,13 @@ export function TopBar({ title, onBack, right }: { title?: string; onBack?: () =
   );
 }
 
-export function ProdImg({ size = 56, radius = 12 }: { size?: number; radius?: number }) {
+export function ProdImg({ size = 56, radius = 12, uri }: { size?: number; radius?: number; uri?: string }) {
   return (
-    <View style={{ width: size, height: size, borderRadius: radius, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: size, height: size, borderRadius: radius, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
       <Hair radius={radius} />
-      <Icon name="image" size={Math.max(16, Math.round(size / 3))} color={C.imageIcon} />
+      {uri
+        ? <Image source={{ uri }} contentFit="cover" style={{ width: size, height: size }} accessibilityLabel="제품 사진" />
+        : <Icon name="image" size={Math.max(16, Math.round(size / 3))} color={C.imageIcon} />}
     </View>
   );
 }

@@ -3,6 +3,43 @@
 Claude Design 시안(최신 프로토타입 v5: `다씀 프로토타입.html`, `proto/screens.jsx`)을 **Expo + React Native**로 옮긴 앱입니다.
 화면 구성, 수치, 문구, 화면 이동, 상태 변화를 프로토타입과 같게 맞췄고, API와 DB 자리는 목업 데이터로 비워 두었습니다.
 
+## v5 화면에 AI·DB 기능 이식 중
+
+`feature/design-v5-ai-db-flow` 작업 브랜치에서는 기존 `dassem/`과 `backend/`의 기능을
+이 v5 화면에 옮기고 있습니다. 이 화면을 최종 프론트로 확정한 것은 아니며, 기능 결합을 검증하기 위한 작업입니다.
+
+현재 연결된 흐름:
+
+1. 홈에서 제품 등록 → 카메라 또는 앨범 선택
+2. 사진을 백엔드 AI 인식 API로 전송
+3. 인식된 제품명·카테고리·사용기한을 확인하고 수정
+4. 사진과 제품 정보를 SQLite에 저장
+5. 저장된 제품을 내 물품 목록과 상세 화면에 표시
+
+백엔드 실행(저장소 루트에서):
+
+```powershell
+$env:DASSEM_HOST="0.0.0.0"
+node backend/server.mjs
+```
+
+웹에서 앱 실행(`dasseum/`에서):
+
+```powershell
+$env:EXPO_PUBLIC_API_URL="http://127.0.0.1:3001"
+npx.cmd expo start --web
+```
+
+휴대폰에서는 `127.0.0.1` 대신 PC의 같은 Wi-Fi IPv4 주소를 사용합니다.
+
+```powershell
+$env:EXPO_PUBLIC_API_URL="http://PC의_IPv4주소:3001"
+npx.cmd expo start
+```
+
+AI 인식은 백엔드에 Gemini 또는 Elice Vision 환경변수가 올바르게 설정되어야 실제 응답을 반환합니다.
+API 키와 `.env` 파일은 GitHub에 올리지 않습니다.
+
 ## 반영 버전: dasseum_app_1113_v1.zip
 
 전달받은 `dasseum_app_1113_v1.zip`의 최신 프런트엔드 코드와 패키지 파일을 `dasseum/`에 반영했습니다. 기존 `dassem/`, `backend/`, 유저플로우 차트 및 Git 연습 문서는 유지합니다. README는 실제 반영 내용과 현재 제한을 설명하도록 별도로 보완했습니다.

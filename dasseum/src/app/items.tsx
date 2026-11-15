@@ -4,16 +4,16 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Screen, Scroll } from '@/components/shell';
 import { DBadge, ddayBadge, Hair, Icon, Line, Press, ProdImg, T } from '@/components/ui';
-import { ALL_IDS, CATEGORIES } from '@/data/products';
+import { CATEGORIES } from '@/data/products';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
 const CATS = ['전체', ...CATEGORIES];
 
 export default function Items() {
-  const { product, completed } = useApp();
+  const { product, productIds, completed } = useApp();
   const [cat, setCat] = useState('전체');
-  const all = ALL_IDS.filter((k) => !completed.includes(k)).map(product).sort((a, b) => (a.dday ?? 1e9) - (b.dday ?? 1e9));
+  const all = productIds.filter((k) => !completed.includes(k)).map(product).sort((a, b) => (a.dday ?? 1e9) - (b.dday ?? 1e9));
   const list = cat === '전체' ? all : all.filter((p) => p.cat === cat);
 
   return (
@@ -41,7 +41,7 @@ export default function Items() {
           {list.map((p, i) => (
             <Press key={p.id} onPress={() => router.push({ pathname: '/product/[id]', params: { id: p.id } })} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 }}>
               {i < list.length - 1 && <Line at="bottom" />}
-              <ProdImg size={60} radius={14} />
+              <ProdImg size={60} radius={14} uri={p.imageUri} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <T numberOfLines={1} style={tx(16, 24, 500)}>{p.name}</T>
                 <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>

@@ -27,7 +27,7 @@ export default function Done() {
         </Card>
         <Card style={{ width: '100%', marginTop: 10, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <T style={tx(14, 20, 600, C.neutral)}>지금까지 다 쓴 제품</T>
-          <T style={tx(17, 24, 700)}>{11 + dones.length}개</T>
+          <T style={tx(17, 24, 700)}>{dones.length}개</T>
         </Card>
       </View>
       <ActionArea>

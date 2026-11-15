@@ -1,8 +1,10 @@
 // 3. 사진으로 확인 / 제품 등록 촬영
 // 카메라 미리보기는 디자인 시안과 같이 자리표시 영역입니다. 실제 촬영은 expo-camera의 CameraView를 이 영역에 넣으면 됩니다.
 import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, View, type ViewStyle } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Alert, Pressable, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { setPendingPhoto } from '@/api/products';
 import { nav, Screen } from '@/components/shell';
 import { Hair, Icon, IconBtn, T } from '@/components/ui';
 import { C, tx } from '@/theme/tokens';
@@ -11,9 +13,27 @@ export default function Camera() {
   const { purpose } = useLocalSearchParams<{ purpose?: string }>();
   const reg = purpose === 'register';
   const insets = useSafeAreaInsets();
-  const shoot = () => {
-    if (reg) router.replace('/recognized');
-    else router.push({ pathname: '/analyzing', params: { mode: 'photo', q: '촬영한 사진' } });
+  const handlePhoto = async (source: 'camera' | 'library') => {
+    try {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('카메라 권한이 필요해요', '제품 사진을 촬영하려면 카메라 사용을 허용해 주세요.');
+          return;
+        }
+      }
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7, base64: true })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: true });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset.base64) throw new Error('선택한 사진을 읽지 못했어요.');
+      const mime = asset.mimeType && /^image\/(jpeg|png|webp)$/.test(asset.mimeType) ? asset.mimeType : 'image/jpeg';
+      setPendingPhoto(`data:${mime};base64,${asset.base64}`);
+      router.replace({ pathname: '/analyzing', params: { mode: reg ? 'register-photo' : 'photo', q: '' } });
+    } catch (error) {
+      Alert.alert('사진을 불러오지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    }
   };
   const corner = (pos: ViewStyle): ViewStyle => ({ position: 'absolute', width: 28, height: 28, borderColor: '#fff', ...pos });
 
@@ -39,10 +59,10 @@ export default function Camera() {
         <T style={tx(15, 22, 400, '#fff')}>제품 이름이 잘 보이게 찍어주세요</T>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, paddingHorizontal: 36, paddingBottom: 28 + insets.bottom }}>
-        <Pressable onPress={shoot} accessibilityLabel="앨범에서 선택" style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable onPress={() => handlePhoto('library')} accessibilityLabel="앨범에서 선택" style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="image" size={24} color="#fff" />
         </Pressable>
-        <Pressable onPress={shoot} accessibilityLabel="촬영" style={{ width: 72, height: 72 }}>
+        <Pressable onPress={() => handlePhoto('camera')} accessibilityLabel="촬영" style={{ width: 72, height: 72 }}>
           <View style={{ position: 'absolute', left: -6, top: -6, width: 84, height: 84, borderRadius: 42, backgroundColor: 'rgba(255,255,255,0.6)' }} />
           <View style={{ position: 'absolute', left: -4, top: -4, width: 80, height: 80, borderRadius: 40, backgroundColor: C.dark }} />
           <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: '#fff' }} />

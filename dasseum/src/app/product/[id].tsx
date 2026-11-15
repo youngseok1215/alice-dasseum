@@ -1,5 +1,6 @@
 // 6. 보유 제품 상세
 import { router, useLocalSearchParams } from 'expo-router';
+import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import { nav, Screen, Scroll, useToast } from '@/components/shell';
@@ -24,12 +25,13 @@ export default function Detail() {
 
   return (
     <Screen>
-      <TopBar title="" onBack={nav.back} right={<IconBtn name="moreVertical" label="더보기" onPress={() => toast('수정·삭제는 이번 테스트 범위가 아니에요')} />} />
+      <TopBar title="" onBack={nav.back} right={<IconBtn name="moreVertical" label="제품 수정 및 삭제" onPress={() => router.push({ pathname: '/product/edit/[id]', params: { id: p.id } })} />} />
       <Scroll style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}>
         <View style={{ aspectRatio: 4 / 3, borderRadius: 16, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <Hair radius={16} />
-          <Icon name="image" size={32} color={C.imageIcon} />
-          <T style={tx(13, 18, 400, C.neutral)}>제품 사진</T>
+          {p.imageUri
+            ? <Image source={{ uri: p.imageUri }} contentFit="contain" style={{ width: '100%', height: '100%', borderRadius: 16 }} accessibilityLabel="제품 사진" />
+            : <><Icon name="image" size={32} color={C.imageIcon} /><T style={tx(13, 18, 400, C.neutral)}>제품 사진</T></>}
         </View>
         <View style={{ marginTop: 20, flexDirection: 'row' }}><DBadge tone="neutral">{p.cat}</DBadge></View>
         <T style={[tx(14, 20, 400, C.alt), { marginTop: 10 }]}>{p.brand}</T>

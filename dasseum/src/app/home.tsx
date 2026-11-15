@@ -4,15 +4,21 @@ import { ScrollView, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Screen, Scroll, useToast } from '@/components/shell';
 import { Card, DBadge, ddayBadge, Icon, IconBtn, Line, Mascot, Press, ProdImg, SectionHead, T } from '@/components/ui';
-import { FIRST_IDS, URGENT_IDS } from '@/data/products';
+import { isCurrentMonth } from '@/data/products';
 import { useApp } from '@/store/AppStore';
 import { BRAND_FONT, C, tx } from '@/theme/tokens';
 
 export default function Home() {
   const toast = useToast();
-  const { holdList, dones, product } = useApp();
-  const firsts = FIRST_IDS.map(product);
-  const urgent = URGENT_IDS.map(product);
+  const { holdList, dones, product, productIds, completed } = useApp();
+  const owned = productIds.filter((id) => !completed.includes(id)).map(product);
+  const dated = owned.filter((item) => item.dday !== null);
+  const firsts = dated.filter((item) => (item.dday ?? -1) >= 0)
+    .sort((a, b) => (a.dday ?? Number.MAX_SAFE_INTEGER) - (b.dday ?? Number.MAX_SAFE_INTEGER)).slice(0, 3);
+  const urgent = dated.filter((item) => (item.dday ?? Number.MAX_SAFE_INTEGER) <= 30)
+    .sort((a, b) => (a.dday ?? Number.MAX_SAFE_INTEGER) - (b.dday ?? Number.MAX_SAFE_INTEGER)).slice(0, 5);
+  const monthlyDones = dones.filter((item) => isCurrentMonth(item.date)).length;
+  const monthlyHolds = holdList.filter((item) => isCurrentMonth(item.date)).length;
   const openDetail = (id: string) => router.push({ pathname: '/product/[id]', params: { id } });
 
   return (
@@ -31,7 +37,7 @@ export default function Home() {
 
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 4, paddingRight: 12, paddingBottom: 20, paddingLeft: 20, marginTop: -10 }}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <T style={tx(20, 28, 700)} numberOfLines={2}>{'확인이 필요한 제품이\n2개 있어요'}</T>
+            <T style={tx(20, 28, 700)} numberOfLines={2}>{`확인이 필요한 제품이\n${urgent.length}개 있어요`}</T>
             <T style={[tx(13, 19, 400, C.homeSub), { marginTop: 6 }]}>있는 걸 먼저, 끝까지 다 쓰는 습관</T>
           </View>
           <Mascot kind="smile" size={154} />
@@ -88,7 +94,7 @@ export default function Home() {
           <Card tone="cream" onPress={() => router.push({ pathname: '/records', params: { tab: 'hold' } })} style={{ paddingVertical: 16, paddingRight: 16, paddingLeft: 20, flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ flex: 1 }}>
               <T style={tx(13, 18, 600, C.neutral)}>이번 달 소비 관리</T>
-              <T style={[tx(17, 26, 700), { marginTop: 2 }]}>다씀 {dones.length}개 · 구매 보류 {holdList.length}회</T>
+              <T style={[tx(17, 26, 700), { marginTop: 2 }]}>다씀 {monthlyDones}개 · 구매 보류 {monthlyHolds}회</T>
             </View>
             <Icon name="chevronRight" size={20} color={C.alt} />
           </Card>

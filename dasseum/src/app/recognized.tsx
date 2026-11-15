@@ -1,11 +1,13 @@
 // + 제품 등록 · AI 인식 완료 (목업: 비타민D 정보 자동 입력)
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Alert, Pressable, TextInput, View } from 'react-native';
+import { clearPendingRegistration, createProduct, getPendingPhoto, getPendingSuggestion, saveProductImage } from '@/api/products';
 import { DateField } from '@/components/DateField';
 import { nav, Screen, Scroll } from '@/components/shell';
 import { ActionArea, DBadge, DButton, Hair, Icon, T, TopBar } from '@/components/ui';
 import { CATEGORIES } from '@/data/products';
+import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
 
 function Label({ children, hint }: { children: ReactNode; hint?: string }) {
@@ -18,10 +20,41 @@ function Label({ children, hint }: { children: ReactNode; hint?: string }) {
 }
 
 export default function Recognized() {
-  const [f, setF] = useState({ name: '비타민D 2000IU', cat: '영양제', opened: '', expires: '2027-11-12' });
+  const suggestion = getPendingSuggestion();
+  const [f, setF] = useState({
+    name: suggestion?.name || '',
+    cat: suggestion?.category || '',
+    opened: '',
+    expires: suggestion?.expiresAt || '',
+  });
   const [focus, setFocus] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const { addProduct } = useApp();
   const set = (k: keyof typeof f, v: string) => setF((s) => ({ ...s, [k]: v }));
   const ok = !!(f.name.trim() && f.cat);
+  const submit = async () => {
+    if (!ok || saving) return;
+    setSaving(true);
+    try {
+      const photo = getPendingPhoto();
+      const imageUri = photo ? await saveProductImage(photo) : undefined;
+      const product = await createProduct({
+        name: f.name.trim(),
+        brand: suggestion?.brand || undefined,
+        category: f.cat as (typeof CATEGORIES)[number],
+        openedAt: f.opened || undefined,
+        expiresAt: f.expires || undefined,
+        imageUri,
+      });
+      addProduct(product);
+      clearPendingRegistration();
+      router.replace('/registered');
+    } catch (error) {
+      Alert.alert('제품을 등록하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Screen>
@@ -32,7 +65,7 @@ export default function Recognized() {
           <T style={tx(14, 20, 400, C.neutral)}>촬영한 사진에서 정보를 찾았어요</T>
         </View>
         <View style={{ flexDirection: 'row' }}><DBadge tone="mint">인식 완료</DBadge></View>
-        <T style={[tx(24, 32, 700), { marginTop: 10 }]}>비타민D 정보를 찾았어요</T>
+        <T style={[tx(24, 32, 700), { marginTop: 10 }]}>{suggestion?.name ? `${suggestion.name} 정보를 찾았어요` : '인식한 정보를 확인해 주세요'}</T>
         <T style={[tx(15, 22, 400, C.alt), { marginTop: 4 }]}>AI가 잘못 읽었을 수 있어요. 확인하고 다르면 고쳐 주세요.</T>
 
         <View style={{ gap: 18, marginTop: 24 }}>
@@ -70,7 +103,7 @@ export default function Recognized() {
           </View>
         </View>
       </Scroll>
-      <ActionArea><DButton label="등록 완료" disabled={!ok} onPress={() => router.replace('/registered')} /></ActionArea>
+      <ActionArea><DButton label={saving ? '저장 중...' : '등록 완료'} disabled={!ok || saving} onPress={submit} /></ActionArea>
     </Screen>
   );
 }

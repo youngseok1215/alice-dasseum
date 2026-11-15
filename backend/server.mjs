@@ -37,6 +37,13 @@ const insert = database.prepare(`
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const list = database.prepare('SELECT * FROM products ORDER BY createdAt DESC, rowid DESC');
+const findById = database.prepare('SELECT * FROM products WHERE id = ?');
+const update = database.prepare(`
+  UPDATE products
+  SET name = ?, brand = ?, category = ?, quantity = ?, openedAt = ?, expiresAt = ?, imageUri = ?
+  WHERE id = ?
+`);
+const remove = database.prepare('DELETE FROM products WHERE id = ?');
 
 function send(response, status, body) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -51,6 +58,16 @@ function sendImage(response, path) {
     'Cache-Control': 'public, max-age=31536000, immutable',
   });
   response.end(readFileSync(path));
+}
+
+function publicProduct({ openedAt, expiresAt, brand, imageUri, ...product }) {
+  return {
+    ...product,
+    openedAt: openedAt ?? undefined,
+    expiresAt: expiresAt ?? undefined,
+    brand: brand ?? undefined,
+    imageUri: imageUri ?? undefined,
+  };
 }
 
 function optionalDate(value, field) {
@@ -199,8 +216,9 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const path = url.pathname;
     const imageMatch = /^\/api\/images\/([0-9a-f-]+\.(?:jpg|jpeg|png|webp))$/i.exec(path);
+    const productMatch = /^\/api\/products\/([0-9a-f-]+)$/i.exec(path);
     const knownPath = path === '/api/products' || path === '/api/products/recognize' ||
-      path === '/api/products/images' || path === '/api/products/images/search' || imageMatch;
+      path === '/api/products/images' || path === '/api/products/images/search' || imageMatch || productMatch;
     if (!knownPath) return send(response, 404, { error: 'Not found' });
 
     const origin = request.headers.origin;
@@ -213,7 +231,7 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === 'OPTIONS') {
       response.writeHead(204, {
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       return response.end();
@@ -223,17 +241,17 @@ const server = createServer(async (request, response) => {
       return sendImage(response, resolve(imageDirectory, imageMatch[1]));
     }
     if (request.method === 'GET' && path === '/api/products') {
-      const products = list.all().map(({ openedAt, expiresAt, brand, imageUri, ...product }) => ({
-        ...product,
-        openedAt: openedAt ?? undefined,
-        expiresAt: expiresAt ?? undefined,
-        brand: brand ?? undefined,
-        imageUri: imageUri ?? undefined,
-      }));
+      const products = list.all().map(publicProduct);
       return send(response, 200, { products });
     }
-    if (request.method !== 'POST') {
-      response.setHeader('Allow', 'GET, POST, OPTIONS');
+    if (request.method === 'DELETE' && productMatch) {
+      const existing = findById.get(productMatch[1]);
+      if (!existing) return send(response, 404, { error: 'Product not found' });
+      remove.run(productMatch[1]);
+      return send(response, 200, { deleted: true });
+    }
+    if (request.method !== 'POST' && request.method !== 'PATCH') {
+      response.setHeader('Allow', 'GET, POST, PATCH, DELETE, OPTIONS');
       return send(response, 405, { error: 'Method not allowed' });
     }
 
@@ -241,6 +259,29 @@ const server = createServer(async (request, response) => {
       path === '/api/products/images/search';
     const body = await readJson(request, response, largeBody ? maxImageBytes + 1024 : 16_384);
     if (body === undefined) return;
+
+    if (request.method === 'PATCH' && productMatch) {
+      const existing = findById.get(productMatch[1]);
+      if (!existing) return send(response, 404, { error: 'Product not found' });
+      let changed;
+      try {
+        changed = parseProduct({
+          name: body?.name ?? existing.name,
+          brand: body?.brand ?? existing.brand,
+          category: body?.category ?? existing.category,
+          quantity: body?.quantity ?? existing.quantity,
+          openedAt: body?.openedAt ?? existing.openedAt ?? undefined,
+          expiresAt: body?.expiresAt ?? existing.expiresAt ?? undefined,
+          imageUri: body?.imageUri ?? existing.imageUri,
+        });
+      } catch (error) {
+        return send(response, 400, { error: error.message });
+      }
+      update.run(changed.name, changed.brand ?? null, changed.category, changed.quantity,
+        changed.openedAt ?? null, changed.expiresAt ?? null, changed.imageUri ?? null, productMatch[1]);
+      return send(response, 200, { product: publicProduct(findById.get(productMatch[1])) });
+    }
+    if (request.method === 'PATCH') return send(response, 404, { error: 'Not found' });
 
     if (path === '/api/products/recognize') {
       const { status, result } = await recognizeProduct(body?.image, categories);

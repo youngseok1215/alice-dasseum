@@ -7,20 +7,21 @@ import { DButton, Hair, Icon, IconBtn, Line, Press, T } from '@/components/ui';
 import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
 
-function startSearch(q: string, setQuery: (q: string) => void, addRecent: (q: string) => void) {
+async function startSearch(q: string, setQuery: (q: string) => void, addRecent: (q: string) => void, refreshProducts: () => Promise<void>) {
   setQuery(q);
   addRecent(q);
+  await refreshProducts();
   router.push({ pathname: '/analyzing', params: { mode: 'search', q } });
 }
 
 export default function Check() {
-  const { query, setQuery, recents, addRecent, removeRecent } = useApp();
+  const { query, setQuery, recents, addRecent, removeRecent, refreshProducts } = useApp();
   const ref = useRef<TextInputInstance>(null);
   const [focus, setFocus] = useState(false);
   const submit = (q?: string) => {
     const v = (q ?? query).trim();
     if (!v) return;
-    startSearch(v, setQuery, addRecent);
+    startSearch(v, setQuery, addRecent, refreshProducts);
   };
 
   return (

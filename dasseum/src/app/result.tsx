@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 import { nav, Screen, Scroll, useToast } from '@/components/shell';
 import { ActionArea, Card, DBadge, DButton, ddayBadge, Hair, Icon, Line, ProdImg, T, TopBar } from '@/components/ui';
-import { matchQuery, type CheckMode } from '@/data/products';
+import { matchOwnedProducts, type CheckMode } from '@/data/products';
 import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
 
@@ -11,16 +11,16 @@ export default function Result() {
   const params = useLocalSearchParams<{ mode?: string; q?: string }>();
   const mode = (params.mode === 'photo' ? 'photo' : 'search') as CheckMode;
   const q = params.q ?? '';
-  const { product, hold, setQuery } = useApp();
+  const { product, productIds, hold, setQuery } = useApp();
   const toast = useToast();
-  const r = matchQuery(q, mode);
+  const r = matchOwnedProducts(q, productIds.map(product));
 
   const V = {
     same: {
       badge: <View style={{ height: 22, justifyContent: 'center' }}><T style={{ fontSize: 12, lineHeight: 16, fontFamily: FONT[600], letterSpacing: 0.24, color: C.red40 }}>동일 제품 있음</T></View>,
-      title: '이미 가지고 있어요', sub: '내 물품에 같은 제품이 1개 있어요.',
+      title: '이미 가지고 있어요', sub: `내 물품에 같은 제품이 ${r.items.length}개 있어요.`,
     },
-    similar: { badge: <DBadge tone="mint">유사 제품 있음</DBadge>, title: '비슷한 제품이 있어요', sub: '같은 브랜드의 다른 용량 제품이에요.' },
+    similar: { badge: <DBadge tone="mint">유사 제품 있음</DBadge>, title: '비슷한 제품이 있어요', sub: '제품명·브랜드·용량이 비슷한 제품이에요.' },
     none: { badge: <DBadge tone="ok">보유 제품 없음</DBadge>, title: '가지고 있는 제품이 없어요', sub: `내 물품에서 ‘${q}’과 같거나 비슷한 제품을 찾지 못했어요.` },
   }[r.verdict];
   const isSupp = r.items.some((k) => ['영양제', '의약품'].includes(product(k).cat));
@@ -49,11 +49,11 @@ export default function Result() {
           return (
             <Card key={k} style={{ marginTop: 20, padding: 16 }}>
               <View style={{ flexDirection: 'row', gap: 14 }}>
-                <ProdImg size={72} />
+                <ProdImg size={72} uri={p.imageUri} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <T style={tx(13, 18, 400, C.alt)}>{p.brand} · {p.cat}</T>
                   <T style={[tx(16, 24, 500), { marginTop: 2 }]}>{p.name}</T>
-                  {r.verdict === 'similar' && <T style={[tx(13, 18, 400, C.neutral), { marginTop: 4 }]}>확인한 제품과 용량이 달라요 (1000IU · 2000IU)</T>}
+                  {r.verdict === 'similar' && <T style={[tx(13, 18, 400, C.neutral), { marginTop: 4 }]}>입력한 제품과 이름·브랜드·용량이 비슷해요</T>}
                 </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 16, marginTop: 14, paddingTop: 14 }}>
