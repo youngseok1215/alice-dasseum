@@ -3,14 +3,13 @@ import { router } from 'expo-router';
 import { View } from 'react-native';
 import { nav, Screen, Scroll } from '@/components/shell';
 import { DBadge, Icon, Line, Press, ProdImg, T, TopBar } from '@/components/ui';
+import { byDday, FIRST_IDS, reasonOf } from '@/data/products';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
 export default function First() {
-  const { product, productIds, completed } = useApp();
-  const list = productIds.filter((id) => !completed.includes(id)).map(product)
-    .filter((item) => item.dday !== null && (item.dday ?? -1) >= 0 && item.reason)
-    .sort((a, b) => (a.dday ?? Number.MAX_SAFE_INTEGER) - (b.dday ?? Number.MAX_SAFE_INTEGER));
+  const { product, completed } = useApp();
+  const list = FIRST_IDS.filter((k) => !completed.includes(k)).map(product).filter((p) => reasonOf(p)).sort(byDday);
   return (
     <Screen>
       <TopBar title="먼저 써야 할 제품" onBack={nav.back} />
@@ -22,11 +21,11 @@ export default function First() {
             <Press key={p.id} onPress={() => router.push({ pathname: '/product/[id]', params: { id: p.id } })} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 }}>
               {i < list.length - 1 && <Line at="bottom" />}
               <T style={[tx(15, 22, 700, C.neutral), { width: 20, textAlign: 'center' }]}>{i + 1}</T>
-              <ProdImg size={60} radius={14} />
+              <ProdImg size={60} radius={14} uri={p.imageUri} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <T numberOfLines={1} style={tx(16, 24, 500)}>{p.name}</T>
                 <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                  <DBadge tone="mint">{p.reason}</DBadge>
+                  <DBadge tone="mint">{reasonOf(p)}</DBadge>
                   <DBadge tone="neutral">{p.cat}</DBadge>
                 </View>
               </View>

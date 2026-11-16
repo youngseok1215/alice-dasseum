@@ -1,31 +1,71 @@
-// 앱 상태 — 프로토타입 App()의 state + localStorage 저장을 Context + AsyncStorage로 옮김
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { deleteProduct as deleteRemoteProduct, listProducts, updateProduct as updateRemoteProduct } from '@/api/products';
-import { calculateDday, PRODUCTS, recommendationReason, SEED, TODAY, TODAY_SHORT, type CheckMode, type DoneRecord, type HoldRecord, type Product, type RecentCheck, type Verdict } from '@/data/products';
+import {
+  createProduct as createRemoteProduct,
+  deleteProduct as deleteRemoteProduct,
+  listProducts,
+  updateProduct as updateRemoteProduct,
+} from '@/api/products';
+import {
+  ALL_IDS,
+  PRODUCTS,
+  SEED,
+  TODAY,
+  TODAY_SHORT,
+  ddayOf,
+  reasonOf,
+  type Category,
+  type CheckMode,
+  type DoneRecord,
+  type HoldRecord,
+  type PhotoVerdict,
+  type Product,
+  type RecentCheck,
+  type Verdict,
+} from '@/data/products';
 
-const KEY = 'dasseum-app-v1';
-
+const KEY = 'dasseum-app-v14';
 type State = typeof SEED;
+type ProductForm = {
+  name: string;
+  cat: Category;
+  opened: string;
+  expires: string;
+  manual?: boolean;
+  brand?: string;
+  imageUri?: string;
+};
 
 interface Store extends State {
   ready: boolean;
-  productIds: string[];
   setQuery: (q: string) => void;
   addRecent: (q: string) => void;
   removeRecent: (q: string) => void;
   hold: (p: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => void;
   markDone: (id: string) => void;
+  undoDone: (id: string) => void;
   openToday: (id: string) => void;
   product: (id: string) => Product;
-  addProduct: (product: Product) => void;
-  updateOwnedProduct: (product: Product) => Promise<void>;
-  deleteOwnedProduct: (id: string) => Promise<void>;
+  products: () => Product[];
+  registerProduct: (form: ProductForm) => Promise<string>;
+  updateProduct: (id: string, form: ProductForm) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
   refreshProducts: () => Promise<void>;
+  setNotifyEnabled: (value: boolean) => void;
+  setCameraPermission: (value: State['cameraPermission']) => void;
+  markAlertRead: (id: string) => void;
+  markAlertsSeen: () => void;
+  finishOnboarding: () => void;
+  setDevPhotoVerdict: (v: PhotoVerdict) => void;
+  setDevRegisterFail: (v: State['devRegisterFail']) => void;
   reset: () => void;
 }
 
 const Ctx = createContext<Store | null>(null);
+
+function apiDate(value: string | null | undefined) {
+  return value ? value.replace(/\./g, '-') : undefined;
+}
 
 export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [s, setS] = useState<State>(SEED);
@@ -39,15 +79,15 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {})
       .finally(() => { loaded.current = true; setReady(true); });
   }, []);
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEY, JSON.stringify(s)).catch(() => {}); }, [s]);
+  useEffect(() => {
+    if (loaded.current) AsyncStorage.setItem(KEY, JSON.stringify(s)).catch(() => {});
+  }, [s]);
 
   const refreshProducts = useCallback(async () => {
-    try {
-      setRemoteProducts(await listProducts());
-    } catch {
-      // 백엔드가 꺼져 있어도 디자인 목업 데이터로 앱은 계속 동작합니다.
-    }
+    const items = await listProducts();
+    setRemoteProducts(items);
   }, []);
+
   useEffect(() => {
     let active = true;
     listProducts()
@@ -56,87 +96,170 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     return () => { active = false; };
   }, []);
 
-  const products = useMemo(() => ({
-    ...PRODUCTS,
-    ...Object.fromEntries(remoteProducts.map((product) => [product.id, product])),
-  }), [remoteProducts]);
-  const productIds = useMemo(() => [...remoteProducts.map((product) => product.id), ...Object.keys(PRODUCTS)]
-    .filter((id) => !s.removedProductIds.includes(id)), [remoteProducts, s.removedProductIds]);
-  const addProduct = useCallback((product: Product) => {
-    setRemoteProducts((current) => [product, ...current.filter((item) => item.id !== product.id)]);
+  const findProduct = useCallback((state: State, id: string): Product => {
+    const base = remoteProducts.find((p) => p.id === id)
+      ?? state.registeredProducts.find((p) => p.id === id)
+      ?? PRODUCTS[id]
+      ?? PRODUCTS.vitd;
+    const edit = state.productEdits?.[base.id];
+    const opened = state.openedOverrides[base.id];
+    const current = { ...base, ...(edit || {}), ...(opened ? { opened } : {}) };
+    const withDday = { ...current, dday: ddayOf(current.expires) };
+    return { ...withDday, reason: reasonOf(withDday) || withDday.reason };
+  }, [remoteProducts]);
+
+  const product = useCallback((id: string) => findProduct(s, id), [findProduct, s]);
+  const products = useCallback(() => {
+    const byId = new Map<string, Product>();
+    remoteProducts.forEach((item) => byId.set(item.id, product(item.id)));
+    ALL_IDS.forEach((id) => { if (!byId.has(id)) byId.set(id, product(id)); });
+    s.registeredProducts.forEach((item) => { if (!byId.has(item.id)) byId.set(item.id, product(item.id)); });
+    return [...byId.values()];
+  }, [product, remoteProducts, s.registeredProducts]);
+
+  const setQuery = useCallback((query: string) => setS((x) => ({ ...x, query })), []);
+  const addRecent = useCallback((q: string) => setS((x) => ({
+    ...x,
+    recents: [{ q, date: TODAY_SHORT } as RecentCheck, ...x.recents.filter((r) => r.q !== q)].slice(0, 5),
+  })), []);
+  const removeRecent = useCallback((q: string) => setS((x) => ({ ...x, recents: x.recents.filter((r) => r.q !== q) })), []);
+  const hold = useCallback(({ mode, query, verdict, productId }: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => {
+    setS((x) => {
+      const p = findProduct(x, productId);
+      const rec: HoldRecord = {
+        name: mode === 'photo' ? p.name : query,
+        match: verdict === 'same' ? '동일' : '유사',
+        date: TODAY,
+        isNew: true,
+      };
+      return { ...x, holdList: [rec, ...x.holdList.map((h) => ({ ...h, isNew: false }))] };
+    });
+  }, [findProduct]);
+  const markDone = useCallback((id: string) => setS((x) => {
+    if (x.completed.includes(id)) return x;
+    const p = findProduct(x, id);
+    const rec: DoneRecord = { name: p.name, cat: p.cat, date: TODAY, isNew: true };
+    return { ...x, dones: [rec, ...x.dones.map((d) => ({ ...d, isNew: false }))], completed: [...x.completed, id] };
+  }), [findProduct]);
+  const undoDone = useCallback((id: string) => setS((x) => ({
+    ...x,
+    completed: x.completed.filter((value) => value !== id),
+    dones: x.dones.slice(1),
+  })), []);
+  const openToday = useCallback((id: string) => setS((x) => ({
+    ...x,
+    openedOverrides: { ...x.openedOverrides, [id]: TODAY },
+  })), []);
+
+  const registerProduct = useCallback(async (form: ProductForm) => {
+    const saved = await createRemoteProduct({
+      name: form.name.trim(),
+      brand: form.brand || (form.manual ? '직접 등록' : undefined),
+      category: form.cat,
+      openedAt: apiDate(form.opened),
+      expiresAt: apiDate(form.expires),
+      imageUri: form.imageUri,
+    });
+    setRemoteProducts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+    return saved.id;
   }, []);
-  const updateOwnedProduct = useCallback(async (next: Product) => {
-    const isRemote = remoteProducts.some((item) => item.id === next.id);
+
+  const updateProduct = useCallback(async (id: string, form: ProductForm) => {
+    const isRemote = remoteProducts.some((item) => item.id === id);
     if (isRemote) {
-      const saved = await updateRemoteProduct(next.id, {
-        name: next.name,
-        brand: next.brand || undefined,
-        category: next.cat,
-        openedAt: next.opened?.replace(/\./g, '-') || undefined,
-        expiresAt: next.expires?.replace(/\./g, '-') || undefined,
-        imageUri: next.imageUri,
+      const saved = await updateRemoteProduct(id, {
+        name: form.name.trim(),
+        brand: form.brand || product(id).brand || undefined,
+        category: form.cat,
+        openedAt: apiDate(form.opened),
+        expiresAt: apiDate(form.expires),
+        imageUri: form.imageUri ?? product(id).imageUri,
       });
       setRemoteProducts((current) => current.map((item) => item.id === saved.id ? saved : item));
       return;
     }
-    setS((current) => ({
-      ...current,
-      productOverrides: { ...current.productOverrides, [next.id]: next },
-    }));
-  }, [remoteProducts]);
-  const deleteOwnedProduct = useCallback(async (id: string) => {
+    const date = (value: string) => value ? value.replace(/-/g, '.') : null;
+    const patch: Partial<Product> = {
+      name: form.name.trim(),
+      cat: form.cat,
+      opened: date(form.opened),
+      expires: date(form.expires),
+      dday: ddayOf(form.expires),
+    };
+    setS((x) => {
+      const { [id]: _drop, ...openedOverrides } = x.openedOverrides;
+      if (x.registeredProducts.some((item) => item.id === id)) {
+        return {
+          ...x,
+          openedOverrides,
+          registeredProducts: x.registeredProducts.map((item) => item.id === id ? { ...item, ...patch } : item),
+        };
+      }
+      return { ...x, openedOverrides, productEdits: { ...x.productEdits, [id]: { ...x.productEdits[id], ...patch } } };
+    });
+  }, [product, remoteProducts]);
+
+  const deleteProduct = useCallback(async (id: string) => {
     const isRemote = remoteProducts.some((item) => item.id === id);
     if (isRemote) {
       await deleteRemoteProduct(id);
       setRemoteProducts((current) => current.filter((item) => item.id !== id));
     }
-    setS((current) => {
-      const productOverrides = { ...current.productOverrides };
-      delete productOverrides[id];
-      const openedOverrides = { ...current.openedOverrides };
-      delete openedOverrides[id];
-      return {
-        ...current,
-        productOverrides,
-        openedOverrides,
-        completed: current.completed.filter((item) => item !== id),
-        removedProductIds: [...new Set([...current.removedProductIds, id])],
-      };
-    });
+    setS((x) => ({
+      ...x,
+      registeredProducts: x.registeredProducts.filter((item) => item.id !== id),
+      completed: x.completed.includes(id) ? x.completed : [...x.completed, id],
+    }));
   }, [remoteProducts]);
 
-  const setQuery = useCallback((query: string) => setS((x) => ({ ...x, query })), []);
-  const addRecent = useCallback((q: string) => setS((x) => ({ ...x, recents: [{ q, date: TODAY_SHORT } as RecentCheck, ...x.recents.filter((r) => r.q !== q)].slice(0, 5) })), []);
-  const removeRecent = useCallback((q: string) => setS((x) => ({ ...x, recents: x.recents.filter((r) => r.q !== q) })), []);
-  const hold = useCallback(({ mode, query, verdict, productId }: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => {
-    const P = products[productId] ?? PRODUCTS.vitd;
-    const rec: HoldRecord = { name: mode === 'photo' ? P.name : query, match: verdict === 'same' ? '동일' : '유사', date: TODAY, isNew: true };
-    setS((x) => ({ ...x, holdList: [rec, ...x.holdList.map((h) => ({ ...h, isNew: false }))] }));
-  }, [products]);
-  const markDone = useCallback((id: string) => {
-    setS((x) => {
-      if (x.completed.includes(id)) return x;
-      const P = products[id] ?? PRODUCTS.vitd;
-      const rec: DoneRecord = { name: P.name, cat: P.cat, date: TODAY, isNew: true };
-      return { ...x, dones: [rec, ...x.dones.map((d) => ({ ...d, isNew: false }))], completed: [...x.completed, id] };
-    });
-  }, [products]);
-  const openToday = useCallback((id: string) => setS((x) => ({ ...x, openedOverrides: { ...x.openedOverrides, [id]: TODAY } })), []);
-  const product = useCallback((id: string): Product => {
-    const P = s.productOverrides[id] ?? products[id] ?? PRODUCTS.vitd;
-    const o = s.openedOverrides[P.id];
-    const current = o ? { ...P, opened: o } : P;
-    const withDday = { ...current, dday: calculateDday(current.expires) };
-    return { ...withDday, reason: recommendationReason(withDday) };
-  }, [products, s.openedOverrides, s.productOverrides]);
-  const reset = useCallback(() => setS(SEED), []);
+  const setNotifyEnabled = useCallback((notifyEnabled: boolean) => setS((x) => ({ ...x, notifyEnabled })), []);
+  const setCameraPermission = useCallback((cameraPermission: State['cameraPermission']) => setS((x) => ({ ...x, cameraPermission })), []);
+  const markAlertRead = useCallback((id: string) => setS((x) => ({
+    ...x,
+    readAlerts: x.readAlerts.includes(id) ? x.readAlerts : [...x.readAlerts, id],
+  })), []);
+  const markAlertsSeen = useCallback(() => setS((x) => ({ ...x, alertsSeen: true })), []);
+  const finishOnboarding = useCallback(() => setS((x) => ({ ...x, onboarded: true })), []);
+  const setDevPhotoVerdict = useCallback((devPhotoVerdict: PhotoVerdict) => setS((x) => ({ ...x, devPhotoVerdict })), []);
+  const setDevRegisterFail = useCallback((devRegisterFail: State['devRegisterFail']) => setS((x) => ({ ...x, devRegisterFail })), []);
+  const reset = useCallback(() => {
+    setS(SEED);
+    setRemoteProducts([]);
+    refreshProducts().catch(() => {});
+  }, [refreshProducts]);
 
-  const value = useMemo(() => ({ ...s, ready, productIds, setQuery, addRecent, removeRecent, hold, markDone, openToday, product, addProduct, updateOwnedProduct, deleteOwnedProduct, refreshProducts, reset }), [s, ready, productIds, setQuery, addRecent, removeRecent, hold, markDone, openToday, product, addProduct, updateOwnedProduct, deleteOwnedProduct, refreshProducts, reset]);
+  const value = useMemo(() => ({
+    ...s,
+    ready,
+    setQuery,
+    addRecent,
+    removeRecent,
+    hold,
+    markDone,
+    undoDone,
+    openToday,
+    product,
+    products,
+    registerProduct,
+    updateProduct,
+    deleteProduct,
+    refreshProducts,
+    setNotifyEnabled,
+    setCameraPermission,
+    markAlertRead,
+    markAlertsSeen,
+    finishOnboarding,
+    setDevPhotoVerdict,
+    setDevRegisterFail,
+    reset,
+  }), [s, ready, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, products, registerProduct, updateProduct, deleteProduct, refreshProducts, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
+
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useApp() {
-  const v = useContext(Ctx);
-  if (!v) throw new Error('useApp must be used inside AppStoreProvider');
-  return v;
+  const value = useContext(Ctx);
+  if (!value) throw new Error('useApp must be used inside AppStoreProvider');
+  return value;
 }
+

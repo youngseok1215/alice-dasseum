@@ -2,17 +2,15 @@
 import { router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { C } from '@/theme/tokens';
-import { EASE_OUT } from './Stamp';
+import { C, ND } from '@/theme/tokens';
 import { Icon, T, type IconName } from './ui';
 
 /* ---------- 내비게이션 (프로토타입 go/back/reset 대응) ---------- */
 export const nav = {
   /** 스택을 비우고 해당 화면 하나만 남김 — 프로토타입 go(name, null, false, true) */
-  reset(path: '/home' | '/check' | '/items') {
+  reset(path: '/home' | '/check' | '/items' | '/settings') {
     if (router.canDismiss()) router.dismissAll();
     router.replace(path);
   },
@@ -24,18 +22,16 @@ export const nav = {
 /* ---------- Toast ---------- */
 const ToastCtx = createContext<(msg: string) => void>(() => {});
 export const useToast = () => useContext(ToastCtx);
-const TABBED = ['/home', '/check', '/items'];
+const TABBED = ['/home', '/check', '/items', '/settings'];
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [msg, setMsg] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const opacity = useSharedValue(0);
-  const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const opacity = useRef(new Animated.Value(0)).current;
   const toast = useCallback((m: string) => {
     setMsg(m);
-    // .dsm-fade: 250ms 페이드 인
-    opacity.set(0);
-    opacity.set(withTiming(1, { duration: 250, easing: EASE_OUT }));
+    opacity.setValue(0);
+    Animated.timing(opacity, { toValue: 1, duration: 250, easing: Easing.bezier(0.2, 0, 0, 1), useNativeDriver: ND }).start();
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setMsg(null), 2000);
   }, [opacity]);
@@ -48,7 +44,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastCtx.Provider value={toast}>
       {children}
       {msg && (
-        <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 20, right: 20, bottom, zIndex: 50 }, fade]}>
+        <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 20, right: 20, bottom, opacity, zIndex: 50 }}>
           <View style={{ minHeight: 54, borderRadius: 12, overflow: 'hidden', paddingVertical: 11, paddingLeft: 26, paddingRight: 16, justifyContent: 'center' }}>
             {/* Wanted Toast: backdrop blur(64px) + #1B1C1E 52% + 민트 5% — 블러된 밝은 배경을 단색으로 근사 */}
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(247,250,248,0.94)' }]} />
@@ -80,15 +76,14 @@ export function Scroll(props: ScrollViewProps) {
 }
 
 /* ---------- 하단 탭 ---------- */
-export type TabKey = 'home' | 'check' | 'items';
-const TABS: [TabKey | 'settings', IconName, string][] = [['home', 'home', '홈'], ['check', 'search', '구매 전 확인'], ['items', 'storage', '내 물품'], ['settings', 'setting', '설정']];
+export type TabKey = 'home' | 'check' | 'items' | 'settings';
+const TABS: [TabKey, IconName, string][] = [['home', 'home', '홈'], ['check', 'search', '구매 전 확인'], ['items', 'storage', '내 물품'], ['settings', 'setting', '설정']];
 
 export function BottomNav({ active }: { active: TabKey }) {
   const insets = useSafeAreaInsets();
-  const toast = useToast();
-  const onTab = (k: string) => {
-    if (k === 'settings') return toast('설정은 이번 테스트 범위가 아니에요');
-    nav.reset(('/' + k) as '/home');
+  const onTab = (k: TabKey) => {
+    const paths = { home: '/home', check: '/check', items: '/items', settings: '/settings' } as const;
+    nav.reset(paths[k]);
   };
   return (
     <View style={{ backgroundColor: C.white, paddingTop: 6, paddingBottom: insets.bottom, flexDirection: 'row' }}>
@@ -112,6 +107,6 @@ export function BottomNav({ active }: { active: TabKey }) {
 /** 마운트 후 일정 시간 뒤 실행 (언마운트 시 취소) */
 export function useTimeout(fn: () => void, ms: number) {
   const ref = useRef(fn);
-  useEffect(() => { ref.current = fn; }, [fn]);
+  ref.current = fn;
   useEffect(() => { const t = setTimeout(() => ref.current(), ms); return () => clearTimeout(t); }, [ms]);
 }

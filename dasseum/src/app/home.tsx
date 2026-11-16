@@ -2,23 +2,19 @@
 import { router } from 'expo-router';
 import { ScrollView, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { Screen, Scroll, useToast } from '@/components/shell';
+import { Screen, Scroll } from '@/components/shell';
 import { Card, DBadge, ddayBadge, Icon, IconBtn, Line, Mascot, Press, ProdImg, SectionHead, T } from '@/components/ui';
-import { isCurrentMonth } from '@/data/products';
+import { byDday, FIRST_IDS, reasonOf } from '@/data/products';
+import { useOpenCamera } from '@/hooks/use-open-camera';
 import { useApp } from '@/store/AppStore';
 import { BRAND_FONT, C, tx } from '@/theme/tokens';
 
 export default function Home() {
-  const toast = useToast();
-  const { holdList, dones, product, productIds, completed } = useApp();
-  const owned = productIds.filter((id) => !completed.includes(id)).map(product);
-  const dated = owned.filter((item) => item.dday !== null);
-  const firsts = dated.filter((item) => (item.dday ?? -1) >= 0)
-    .sort((a, b) => (a.dday ?? Number.MAX_SAFE_INTEGER) - (b.dday ?? Number.MAX_SAFE_INTEGER)).slice(0, 3);
-  const urgent = dated.filter((item) => (item.dday ?? Number.MAX_SAFE_INTEGER) <= 30)
-    .sort((a, b) => (a.dday ?? Number.MAX_SAFE_INTEGER) - (b.dday ?? Number.MAX_SAFE_INTEGER)).slice(0, 5);
-  const monthlyDones = dones.filter((item) => isCurrentMonth(item.date)).length;
-  const monthlyHolds = holdList.filter((item) => isCurrentMonth(item.date)).length;
+  const openCamera = useOpenCamera();
+  const { holdList, dones, product, products, completed, notifyEnabled, alertsSeen, markAlertsSeen } = useApp();
+  // 프로토타입 firstList: 이유(reasonOf)가 있는 제품만, 사용기한 임박순
+  const firsts = FIRST_IDS.filter((id) => !completed.includes(id)).map(product).filter((p) => reasonOf(p)).sort(byDday);
+  const urgent = products().filter((p) => !completed.includes(p.id) && p.dday !== null && p.dday <= 7).sort((a, b) => (a.dday ?? 9999) - (b.dday ?? 9999));
   const openDetail = (id: string) => router.push({ pathname: '/product/[id]', params: { id } });
 
   return (
@@ -32,19 +28,19 @@ export default function Home() {
               <Path d="M5.5 10.5 L8.7 13.6 L14.5 7" fill="none" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           </View>
-          <IconBtn name="bell" label="사용기한 알림" dot onPress={() => toast('사용기한 알림은 이번 테스트 범위가 아니에요')} />
+          <IconBtn name="bell" label="사용기한 알림" dot={notifyEnabled && !alertsSeen} onPress={() => { markAlertsSeen(); router.push('/alerts'); }} />
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 4, paddingRight: 12, paddingBottom: 20, paddingLeft: 20, marginTop: -10 }}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <T style={tx(20, 28, 700)} numberOfLines={2}>{`확인이 필요한 제품이\n${urgent.length}개 있어요`}</T>
+            <T style={tx(20, 28, 700)} numberOfLines={2}>{urgent.length ? `확인이 필요한 제품이\n${urgent.length}개 있어요` : '지금 확인할 제품이\n없어요'}</T>
             <T style={[tx(13, 19, 400, C.homeSub), { marginTop: 6 }]}>있는 걸 먼저, 끝까지 다 쓰는 습관</T>
           </View>
           <Mascot kind="smile" size={154} />
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingBottom: 28 }}>
-          <Card onPress={() => router.push({ pathname: '/camera', params: { purpose: 'register' } })} style={{ flex: 1, padding: 16, minHeight: 112, justifyContent: 'space-between' }}>
+          <Card onPress={() => openCamera('register')} style={{ flex: 1, padding: 16, minHeight: 112, justifyContent: 'space-between' }}>
             <Icon name="camera" size={24} />
             <View>
               <T style={tx(16, 24, 800)}>제품 등록</T>
@@ -64,10 +60,10 @@ export default function Home() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 20, paddingBottom: 28 }}>
           {firsts.map((p) => (
             <Card key={p.id} onPress={() => openDetail(p.id)} style={{ width: 148, padding: 12, gap: 10 }}>
-              <ProdImg size={124} />
+              <ProdImg size={124} uri={p.imageUri} />
               <View>
                 <T numberOfLines={2} style={[tx(14, 20, 500), { minHeight: 40 }]}>{p.name}</T>
-                <View style={{ marginTop: 6, flexDirection: 'row' }}><DBadge tone="mint">{p.reason}</DBadge></View>
+                <View style={{ marginTop: 6, minHeight: 22, flexDirection: 'row' }}>{reasonOf(p) && <DBadge tone="mint">{reasonOf(p)}</DBadge>}</View>
               </View>
             </Card>
           ))}
@@ -79,7 +75,7 @@ export default function Home() {
             {urgent.map((p, i) => (
               <Press key={p.id} onPress={() => openDetail(p.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 16 }}>
                 {i > 0 && <Line at="top" />}
-                <ProdImg size={44} radius={10} />
+                <ProdImg size={44} radius={10} uri={p.imageUri} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <T numberOfLines={1} style={tx(15, 22, 500)}>{p.name}</T>
                   <T style={tx(13, 18, 400, C.alt)}>{p.cat} · {p.opened ? '개봉' : '미개봉'}</T>
@@ -94,7 +90,7 @@ export default function Home() {
           <Card tone="cream" onPress={() => router.push({ pathname: '/records', params: { tab: 'hold' } })} style={{ paddingVertical: 16, paddingRight: 16, paddingLeft: 20, flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ flex: 1 }}>
               <T style={tx(13, 18, 600, C.neutral)}>이번 달 소비 관리</T>
-              <T style={[tx(17, 26, 700), { marginTop: 2 }]}>다씀 {monthlyDones}개 · 구매 보류 {monthlyHolds}회</T>
+              <T style={[tx(17, 26, 700), { marginTop: 2 }]}>다씀 {dones.length}개 · 구매 보류 {holdList.length}회</T>
             </View>
             <Icon name="chevronRight" size={20} color={C.alt} />
           </Card>

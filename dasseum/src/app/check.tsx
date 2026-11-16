@@ -4,24 +4,25 @@ import { useRef, useState } from 'react';
 import { Pressable, TextInput, View, type TextInputInstance } from 'react-native';
 import { Screen, Scroll } from '@/components/shell';
 import { DButton, Hair, Icon, IconBtn, Line, Press, T } from '@/components/ui';
+import { useOpenCamera } from '@/hooks/use-open-camera';
 import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
 
-async function startSearch(q: string, setQuery: (q: string) => void, addRecent: (q: string) => void, refreshProducts: () => Promise<void>) {
+function startSearch(q: string, setQuery: (q: string) => void, addRecent: (q: string) => void) {
   setQuery(q);
   addRecent(q);
-  await refreshProducts();
   router.push({ pathname: '/analyzing', params: { mode: 'search', q } });
 }
 
 export default function Check() {
-  const { query, setQuery, recents, addRecent, removeRecent, refreshProducts } = useApp();
+  const openCamera = useOpenCamera();
+  const { query, setQuery, recents, addRecent, removeRecent } = useApp();
   const ref = useRef<TextInputInstance>(null);
   const [focus, setFocus] = useState(false);
   const submit = (q?: string) => {
     const v = (q ?? query).trim();
     if (!v) return;
-    startSearch(v, setQuery, addRecent, refreshProducts);
+    startSearch(v, setQuery, addRecent);
   };
 
   return (
@@ -57,7 +58,7 @@ export default function Check() {
             ) : null}
           </Pressable>
           <DButton label="확인하기" disabled={!query.trim()} onPress={() => submit()} />
-          <DButton label="사진으로 확인하기" variant="outlined" icon="camera" onPress={() => router.push('/camera')} />
+          <DButton label="사진으로 확인하기" variant="outlined" icon="camera" onPress={() => openCamera()} />
         </View>
 
         <View style={{ paddingTop: 32, paddingHorizontal: 20 }}>

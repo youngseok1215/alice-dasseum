@@ -1,8 +1,18 @@
-# 다씀 · 디자인 프런트엔드와 유저플로우
+# 다씀 · 최종 디자인 + AI/백엔드 통합
 
 사진으로 제품을 등록하고, 구매 전에 이미 보유한 제품인지 확인하는 다씀 앱의 디자인 구현 자료입니다. 사용기간·유통기한 확인과 다씀·구매 보류 기록 흐름을 포함합니다.
 
-이 브랜치는 기존 AI 연동 앱을 유지하면서 **별도 디자인 프런트엔드와 v5 유저플로우 차트**를 추가합니다. 두 앱의 코드는 아직 통합하지 않았습니다.
+`feature/final-design-expo`는 `feature/design-back-v5-1115`의 기능과 최종 HTML/Expo 디자인을 합친 통합 브랜치입니다. 실제 실행 대상은 `dasseum/`이며 `backend/`의 AI 인식·SQLite·제품 사진 API와 연결됩니다.
+
+현재 연결된 핵심 흐름:
+
+- 제품 사진 촬영/앨범 선택 → AI 제품명·브랜드·카테고리 인식
+- 유통기한 사진 추가 인식 또는 건너뛰기
+- 인터넷 추천 사진/촬영 사진/앨범 사진 중 선택
+- 제품을 SQLite에 등록하고 내 제품 목록·상세 화면에 사진 표시
+- 구매 전 검색/사진 확인, 유사 제품 판정, 제품 수정·삭제
+
+API 키와 `.env`, `backend/.data/`, 업로드 사진은 Git에 올리지 않습니다.
 
 ## 반영 버전: dasseum_app_1113_v1.zip
 
@@ -19,16 +29,16 @@
 - 본문 기본 글자색을 `#171719`로 정리
 - 검증 과정에서 토스트의 shared value 갱신을 `.set()`으로 변경하고, 타이머 콜백 ref 갱신을 effect로 옮겨 React 린트 규칙에 맞게 보완
 
-API·DB는 여전히 샘플 데이터 기반이며, 등록 완료 화면에서 제품을 실제 목록에 추가하는 처리는 아직 연결하지 않았습니다. ZIP의 소스 반영과 실제 AI·백엔드 통합은 별도 작업입니다.
+목업 제품은 디자인 확인을 위해 남아 있으며, 새로 등록한 제품은 백엔드 SQLite에서 불러옵니다.
 
 ZIP 문서에 언급된 `다씀 프로토타입.html`, `export/dasseum-prototype-v5.html`, `proto/screens.jsx`, `dasseum-gpt-spec.html`은 디자인·개발 기준 문서 이름이며, ZIP 안에는 포함되어 있지 않습니다.
 
 ## 브랜치 기준
 
 - 저장소: https://github.com/youngseok1215/alice-dasseum
-- 브랜치: `feature/design-v5-frontend-userflow`
-- 기반 브랜치: `feature/design-ai-integration`
-- 기반 커밋: `4e39c52`
+- 브랜치: `feature/final-design-expo`
+- 기반 브랜치: `feature/design-back-v5-1115`
+- 기반 아카이브 커밋: `24b0cf3b4239b31f37b95335f85ccccbffb2092c`
 
 ## 폴더 구분
 
@@ -36,9 +46,9 @@ ZIP 문서에 언급된 `다씀 프로토타입.html`, `export/dasseum-prototype
 
 | 경로 | 용도 |
 | --- | --- |
-| `dassem/` | 기존 AI·백엔드 연동 앱. 팀원의 작업을 유지합니다. |
+| `dassem/` | 이전 기능 앱(비교·보존용) |
 | `backend/` | 기존 Node.js·SQLite 백엔드 |
-| `dasseum/` | 이번에 추가한 디자인 프런트엔드. 샘플 데이터로 동작합니다. |
+| `dasseum/` | 최종 디자인과 실제 API 기능을 합친 실행 앱 |
 | `dassum_userflow_v5.png` | v5 유저플로우 차트 |
 
 ## 유저플로우

@@ -38,8 +38,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "제품 사진을 선택해 AI로 인식하기 위해 사진 접근이 필요합니다.",
-          "cameraPermission": "제품 사진을 촬영해 AI로 인식하기 위해 카메라 접근이 필요합니다.",
+          "photosPermission": "다씀에서 제품 사진을 선택하려면 사진 접근 권한이 필요합니다.",
+          "cameraPermission": "다씀에서 제품을 촬영하려면 카메라 접근 권한이 필요합니다.",
           "microphonePermission": false
         }
       ]

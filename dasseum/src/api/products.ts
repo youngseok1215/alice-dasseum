@@ -30,6 +30,7 @@ type StoredProduct = {
 };
 
 let pendingPhoto: string | undefined;
+let pendingExpiryPhoto: string | undefined;
 let pendingSuggestion: ProductSuggestion | undefined;
 
 function apiBaseUrl() {
@@ -66,6 +67,14 @@ export function getPendingPhoto() {
   return pendingPhoto;
 }
 
+export function setPendingExpiryPhoto(photo: string) {
+  pendingExpiryPhoto = photo;
+}
+
+export function getPendingExpiryPhoto() {
+  return pendingExpiryPhoto;
+}
+
 export function setPendingSuggestion(suggestion: ProductSuggestion) {
   pendingSuggestion = suggestion;
 }
@@ -76,6 +85,7 @@ export function getPendingSuggestion() {
 
 export function clearPendingRegistration() {
   pendingPhoto = undefined;
+  pendingExpiryPhoto = undefined;
   pendingSuggestion = undefined;
 }
 

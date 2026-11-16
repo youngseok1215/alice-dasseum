@@ -6,5 +6,10 @@ module.exports = defineConfig([
   expoConfig,
   {
     ignores: ['dist/*'],
+    rules: {
+      // React Native Animated values are intentionally stable refs and are
+      // consumed by native components during render.
+      'react-hooks/refs': 'off',
+    },
   },
 ]);
