@@ -40,10 +40,14 @@ export default function AiAnalysis() {
   const [analyzing, setAnalyzing] = useState(false);
   const toast = useToast();
   const result = purpose ? RESULTS[purpose] ?? ['neutral', '목적에 맞는지 확인해 보세요', `‘${purpose}’ 용도라면 필요한 출력을 먼저 확인해 보세요. 25W로 충분하다면 지금 가진 충전기를 먼저 써 보세요.`] : null;
-  const onHold = () => {
-    hold({ mode: mode === 'photo' ? 'photo' : 'search', query: q, verdict: 'similar', productId: p.id });
-    router.replace({ pathname: '/held', params: { item: p.id } });
-    toast('구매를 미뤘어요. 있는 것부터 써요');
+  const onHold = async () => {
+    try {
+      await hold({ mode: mode === 'photo' ? 'photo' : 'search', query: q, verdict: 'similar', productId: p.id });
+      router.replace({ pathname: '/held', params: { item: p.id } });
+      toast('구매를 미뤘어요. 있는 것부터 써요');
+    } catch (error) {
+      Alert.alert('구매 보류를 기록하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    }
   };
   const continuePurchase = () => { setQuery(''); router.replace('/check'); };
   const ddayText = p.dday == null ? '기한 미입력' : p.dday < 0 ? '기한 지남' : p.dday === 0 ? '오늘까지' : `D-${p.dday}`;
