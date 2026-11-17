@@ -249,7 +249,7 @@ export default function Recognized() {
             <Label hint="1개부터 999개까지">수량</Label>
             <View style={{ height: 48, flexDirection: 'row', alignItems: 'center', borderRadius: 12, backgroundColor: C.white }}>
               <Hair radius={12} color={C.lineNeutral} />
-              <Pressable onPress={() => set('quantity', String(Math.max(1, quantity - 1)))} accessibilityLabel="수량 줄이기"
+              <Pressable onPress={() => set('quantity', String(Math.max(1, (Number.isFinite(quantity) ? quantity : 1) - 1)))} accessibilityLabel="수량 줄이기"
                 style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
                 <T style={tx(22, 28, 500, C.neutral)}>−</T>
               </Pressable>
