@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { setSessionUser, setUserRejectedHandler } from '@/api/session';
+import { createUser, renameUser as renameRemoteUser, type AppUser } from '@/api/users';
 import {
   clearRecords as clearRemoteRecords,
   createHold as createRemoteHold,
@@ -29,6 +32,8 @@ import {
 } from '@/data/products';
 
 const KEY = 'dasseum-app-v15-empty-state';
+/** 이 기기의 사용자 (이름 + 서버가 발급한 ID). 앱을 지우면 함께 사라집니다. */
+const USER_KEY = 'dasseum-user';
 type State = typeof SEED;
 type ProductForm = {
   name: string;
@@ -44,6 +49,10 @@ type ProductForm = {
 
 interface Store extends State {
   ready: boolean;
+  /** 이 기기의 사용자. 없으면 이름 입력 화면(/profile)으로 보냅니다. */
+  user: AppUser | null;
+  signIn: (name: string) => Promise<void>;
+  renameUser: (name: string) => Promise<void>;
   setQuery: (q: string) => void;
   addRecent: (q: string) => void;
   removeRecent: (q: string) => void;
@@ -87,13 +96,51 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [remoteRecords, setRemoteRecords] = useState<ActivityRecord[]>([]);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [synced, setSynced] = useState(false);
+  const [user, setUser] = useState<AppUser | null>(null);
   const loaded = useRef(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(KEY)
-      .then((raw) => { if (raw) setS({ ...SEED, ...JSON.parse(raw) }); })
-      .catch(() => {})
-      .finally(() => { loaded.current = true; setReady(true); });
+    Promise.all([
+      AsyncStorage.getItem(KEY)
+        .then((raw) => { if (raw) setS({ ...SEED, ...JSON.parse(raw) }); })
+        .catch(() => {}),
+      AsyncStorage.getItem(USER_KEY)
+        .then((raw) => {
+          const saved = raw ? JSON.parse(raw) as Partial<AppUser> : undefined;
+          if (saved?.id && saved.name) {
+            setSessionUser(saved.id);
+            setUser({ id: saved.id, name: saved.name });
+          }
+        })
+        .catch(() => {}),
+    ]).finally(() => { loaded.current = true; setReady(true); });
+  }, []);
+
+  // 서버가 이 기기의 사용자를 모르면(서버 DB를 새로 만든 경우 등) 저장된 사용자를 지우고 이름 입력부터 다시
+  useEffect(() => {
+    setUserRejectedHandler(() => {
+      setSessionUser(undefined);
+      AsyncStorage.removeItem(USER_KEY).catch(() => {});
+      setUser(null);
+      setRemoteProducts([]);
+      setRemoteRecords([]);
+      router.replace('/profile');
+    });
+    return () => setUserRejectedHandler(undefined);
+  }, []);
+
+  const signIn = useCallback(async (name: string) => {
+    const created = await createUser(name.trim());
+    setSessionUser(created.id);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(created));
+    setSynced(false);
+    setUser(created);
+  }, []);
+
+  const renameUser = useCallback(async (name: string) => {
+    const renamed = await renameRemoteUser(name.trim());
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(renamed));
+    setUser(renamed);
   }, []);
   useEffect(() => {
     if (loaded.current) AsyncStorage.setItem(KEY, JSON.stringify(s)).catch(() => {});
@@ -114,7 +161,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // 사용자가 정해진 뒤에만 서버 데이터를 불러옵니다 (사용자가 바뀌면 다시 불러옴).
+  const userId = user?.id;
   useEffect(() => {
+    if (!userId) return;
     let active = true;
     Promise.all([listProducts(), listRecords()])
       .then(([items, records]) => {
@@ -128,7 +178,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       })
       .finally(() => { if (active) setSynced(true); });
     return () => { active = false; };
-  }, []);
+  }, [userId]);
 
   const findProduct = useCallback((state: State, id: string): Product => {
     const base = remoteProducts.find((p) => p.id === id)
@@ -323,6 +373,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => ({
     ...s,
     ready,
+    user,
+    signIn,
+    renameUser,
     holdList,
     dones,
     completed,
@@ -351,7 +404,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setDevPhotoVerdict,
     setDevRegisterFail,
     reset,
-  }), [s, ready, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, hasProduct, products, registerProduct, updateProduct, setProductQuantity, deleteProduct, refreshProducts, syncError, synced, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
+  }), [s, ready, user, signIn, renameUser, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, hasProduct, products, registerProduct, updateProduct, setProductQuantity, deleteProduct, refreshProducts, syncError, synced, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

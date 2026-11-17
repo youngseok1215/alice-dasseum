@@ -30,7 +30,7 @@ function Chips<V extends string>({ value, onChange, items }: { value: V; onChang
 export default function Settings() {
   const { nested } = useLocalSearchParams<{ nested?: string }>();
   const notificationOnly = nested === 'notifications';
-  const { notifyEnabled, setNotifyEnabled, cameraPermission, devPhotoVerdict, setDevPhotoVerdict, devRegisterFail, setDevRegisterFail, reset } = useApp();
+  const { user, notifyEnabled, setNotifyEnabled, cameraPermission, devPhotoVerdict, setDevPhotoVerdict, devRegisterFail, setDevRegisterFail, reset } = useApp();
   const toast = useToast();
   const permission = cameraPermission === 'granted' ? '허용됨' : cameraPermission === 'denied' ? '꺼짐' : '요청 전';
   const change = (value: boolean) => { setNotifyEnabled(value); toast(value ? '사용기한 알림을 켰어요' : '사용기한 알림을 껐어요'); };
@@ -38,6 +38,9 @@ export default function Settings() {
     <Screen tab={notificationOnly ? undefined : 'settings'}>
       {notificationOnly ? <TopBar title="알림 설정" onBack={nav.back} /> : <View style={{ height: 56, justifyContent: 'center', paddingHorizontal: 20 }}><T style={tx(22, 30, 700)}>설정</T></View>}
       <Scroll style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+        {!notificationOnly && <Group title="내 정보">
+          <Row label="이름" value={user?.name ?? '등록 전'} onPress={() => router.push(user ? { pathname: '/profile', params: { mode: 'edit' } } : '/profile')} />
+        </Group>}
         <Group title="알림"><Row label="사용기한 알림" sub="기한이 가까운 제품을 알려드려요" right={<Switch value={notifyEnabled} onValueChange={change} trackColor={{ false: 'rgba(112,115,124,0.16)', true: C.point }} thumbColor="#FFFFFF" />} /></Group>
         <Group title="권한">
           <Row label="카메라" value={permission} onPress={() => Linking.openSettings()} />

@@ -1,7 +1,9 @@
 // 백엔드 공통 요청: 배포 주소(EXPO_PUBLIC_API_URL), 요청별 타임아웃, 한국어 오류, 오류 종류 구분.
 // API 키는 여기 없습니다 — 키는 백엔드 환경변수에만 두고, 앱 번들에는 EXPO_PUBLIC_API_URL만 들어갑니다.
 
-export type ApiErrorKind = 'config' | 'network' | 'timeout' | 'server';
+import { getSessionUser, notifyUserRejected } from '@/api/session';
+
+export type ApiErrorKind = 'config' | 'network' | 'timeout' | 'server' | 'auth';
 
 export class ApiError extends Error {
   constructor(message: string, readonly kind: ApiErrorKind, readonly status?: number) {
@@ -45,7 +47,11 @@ export async function apiRequest<T>(path: string, { method = 'GET', body, timeou
     try {
       response = await fetch(url, {
         method,
-        headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+        headers: {
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          // 사용자 구분: 서버가 이 ID의 데이터만 돌려줍니다.
+          ...(getSessionUser() ? { 'X-Dasseum-User': getSessionUser() as string } : {}),
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,
       });
@@ -54,7 +60,12 @@ export async function apiRequest<T>(path: string, { method = 'GET', body, timeou
       if (timedOut) throw new ApiError(`${failMessage} 서버 응답이 늦어요. 잠시 후 다시 시도해 주세요.`, 'timeout');
       throw new ApiError(`${failMessage} 서버에 연결할 수 없어요. 인터넷 연결을 확인해 주세요.`, 'network');
     }
-    const payload = await response.json().catch(() => ({})) as T & { error?: string };
+    const payload = await response.json().catch(() => ({})) as T & { error?: string; code?: string };
+    // 서버가 이 기기의 사용자를 모르면(서버 DB 초기화 등) 이름 입력부터 다시 하도록 알립니다.
+    if (response.status === 401 && payload.code === 'USER_REQUIRED') {
+      notifyUserRejected();
+      throw new ApiError(payload.error || '사용자 정보를 찾을 수 없어요. 이름을 다시 등록해 주세요.', 'auth', 401);
+    }
     return { status: response.status, ok: response.ok, payload };
   } finally {
     clearTimeout(timer);

@@ -38,7 +38,7 @@ export default function Onboarding() {
   const [rects, setRects] = useState<Partial<Record<TargetKey, Rect>>>({});
   const [root, setRoot] = useState({ width: 0, height: 0 });
   const [tipHeight, setTipHeight] = useState(0);
-  const { finishOnboarding } = useApp();
+  const { finishOnboarding, user } = useApp();
   const step = STEPS[index];
   const last = index === STEPS.length - 1;
   const rootRef = useRef<ComponentRef<typeof View>>(null);
@@ -60,7 +60,8 @@ export default function Onboarding() {
 
   const finish = (register = false) => {
     finishOnboarding();
-    router.replace(register ? '/register-method' : '/home');
+    if (!user) router.replace({ pathname: '/profile', params: register ? { next: 'register' } : {} });
+    else router.replace(register ? '/register-method' : '/home');
   };
   const next = () => last ? finish(true) : setIndex((v) => v + 1);
   const active = rects[step.key];

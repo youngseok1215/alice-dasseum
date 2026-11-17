@@ -16,7 +16,7 @@ const VB_W = 375;
 const VB_H = 740;
 
 export default function Splash() {
-  const { onboarded } = useApp();
+  const { onboarded, user } = useApp();
   const insets = useSafeAreaInsets();
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const scale = useRef(new Animated.Value(0.18)).current;
@@ -40,7 +40,8 @@ export default function Splash() {
     ]).start();
   }, [scale, move, dash, logo, slogan]);
 
-  useTimeout(() => onboarded ? nav.reset('/home') : router.replace('/onboarding'), 2000);
+  // 튜토리얼 → 이름 등록 → 홈 순서. 이름(사용자)이 없으면 서버 데이터를 불러올 수 없어 먼저 등록합니다.
+  useTimeout(() => !onboarded ? router.replace('/onboarding') : !user ? router.replace('/profile') : nav.reset('/home'), 2000);
 
   // SVG viewBox(375×740, xMidYMid meet) 좌표 → 화면 좌표
   const k = box ? Math.min(box.w / VB_W, box.h / VB_H) : 1;
