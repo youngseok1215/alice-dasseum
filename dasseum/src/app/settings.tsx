@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, Switch, View } from 'react-native';
+import { Alert, Linking, Pressable, Switch, View } from 'react-native';
 import { nav, Screen, Scroll, useToast } from '@/components/shell';
 import { Icon, Line, Press, T, TopBar } from '@/components/ui';
 import { useApp } from '@/store/AppStore';
@@ -60,13 +60,26 @@ export default function Settings() {
             label="모든 데이터 초기화"
             sub="내 물품과 다씀 기록을 모두 삭제해요"
             onPress={() => {
-              void reset()
-                .then(() => {
-                  if (router.canDismiss()) router.dismissAll();
-                  router.replace('/');
-                  toast('모든 데이터를 초기화했어요');
-                })
-                .catch((error) => toast(error instanceof Error ? error.message : '초기화하지 못했어요'));
+              Alert.alert(
+                '모든 데이터를 초기화할까요?',
+                '내 물품, 최근 확인, 구매 보류, 다씀 기록이 모두 삭제되며 되돌릴 수 없어요.',
+                [
+                  { text: '취소', style: 'cancel' },
+                  {
+                    text: '모두 삭제',
+                    style: 'destructive',
+                    onPress: () => {
+                      void reset()
+                        .then(() => {
+                          if (router.canDismiss()) router.dismissAll();
+                          router.replace('/');
+                          toast('모든 데이터를 초기화했어요');
+                        })
+                        .catch((error) => toast(error instanceof Error ? error.message : '초기화하지 못했어요'));
+                    },
+                  },
+                ],
+              );
             }}
           />
         </Group>}
