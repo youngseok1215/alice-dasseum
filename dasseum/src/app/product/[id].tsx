@@ -12,10 +12,11 @@ import { C, tx } from '@/theme/tokens';
 
 export default function Detail() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
-  const { product, openToday, markDone, deleteProduct } = useApp();
+  const { product, openToday, markDone, setProductQuantity, deleteProduct } = useApp();
   const toast = useToast();
   const [menu, setMenu] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [quantitySaving, setQuantitySaving] = useState(false);
   const p = product(id ?? 'vitd');
   const reason = reasonOf(p);
   const v = tx(15, 22, 600);
@@ -32,6 +33,26 @@ export default function Detail() {
       router.replace({ pathname: '/done/[id]', params: { id: p.id, ...(from ? { from } : {}) } });
     } catch (error) {
       Alert.alert('다씀으로 기록하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    }
+  };
+  const changeQuantity = async (delta: number) => {
+    if (quantitySaving) return;
+    const next = (p.quantity ?? 1) + delta;
+    if (next < 1) {
+      Alert.alert('수량을 모두 사용했나요?', '수량이 0개가 되면 다 쓴 제품으로 기록할 수 있어요.', [
+        { text: '취소', style: 'cancel' },
+        { text: '다씀 처리', onPress: () => { void onDone(); } },
+      ]);
+      return;
+    }
+    setQuantitySaving(true);
+    try {
+      await setProductQuantity(p.id, next);
+      toast('수량을 ' + next + '개로 변경했어요');
+    } catch (error) {
+      Alert.alert('수량을 변경하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    } finally {
+      setQuantitySaving(false);
     }
   };
   // 프로토타입 onDelete: 내 물품 탭으로 이동 + 토스트
@@ -67,6 +88,19 @@ export default function Detail() {
           </View>
         )}
         <View style={{ marginTop: 16 }}>
+          {row('수량', (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Press onPress={() => void changeQuantity(-1)} radius={8} accessibilityLabel="수량 줄이기"
+                style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', backgroundColor: C.card, opacity: quantitySaving ? 0.5 : 1 }}>
+                <T style={tx(20, 24, 600, C.neutral)}>−</T>
+              </Press>
+              <T style={[v, { minWidth: 42, textAlign: 'center' }]}>{p.quantity ?? 1}개</T>
+              <Press onPress={() => void changeQuantity(1)} radius={8} accessibilityLabel="수량 늘리기"
+                style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', backgroundColor: C.card, opacity: quantitySaving ? 0.5 : 1 }}>
+                <T style={tx(20, 24, 600, C.neutral)}>＋</T>
+              </Press>
+            </View>
+          ))}
           {row('사용기한', p.expires ? <><T style={v}>{p.expires}</T>{ddayBadge(p.dday)}</> : ddayBadge(null))}
           {row('개봉일', p.opened ? <T style={v}>{p.opened}</T> : (
             <>
