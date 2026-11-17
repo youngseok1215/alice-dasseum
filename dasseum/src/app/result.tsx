@@ -51,7 +51,7 @@ export default function Result() {
     <Screen>
       <TopBar title="확인 결과" onBack={nav.back} />
       <Scroll style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 4, paddingHorizontal: 20, paddingBottom: 20 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: C.fillAlt, marginBottom: 20 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#70737C0D', marginBottom: 20 }}>
           <Icon name={mode === 'photo' ? 'camera' : 'search'} size={18} color={C.alt} />
           <T style={tx(14, 20, 400, C.neutral)}>{mode === 'photo' ? (album ? '앨범 사진으로 확인했어요' : '촬영한 사진으로 확인했어요') : `‘${q}’ 확인 결과`}</T>
         </View>
