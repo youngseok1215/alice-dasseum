@@ -6,6 +6,8 @@ export type ProductSuggestion = {
   brand: string | null;
   category: Category | null;
   expiresAt: string | null;
+  /** 라벨에서 읽은 용량·함량 (서버가 name에도 붙여서 보냄) */
+  spec?: string | null;
 };
 
 export type CreateProductInput = {
