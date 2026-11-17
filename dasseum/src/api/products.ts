@@ -15,6 +15,7 @@ export type CreateProductInput = {
   openedAt?: string;
   expiresAt?: string;
   imageUri?: string;
+  memo?: string;
 };
 
 export type ActivityRecord = {
@@ -48,6 +49,7 @@ type StoredProduct = {
   openedAt?: string;
   expiresAt?: string;
   imageUri?: string;
+  memo?: string;
   createdAt: string;
   status: 'owned' | 'done';
   completedAt?: string;
@@ -81,6 +83,7 @@ function toProduct(product: StoredProduct): Product {
     registered: dotted(product.createdAt.slice(0, 10)) || '',
     imageUri: product.imageUri?.startsWith('/') ? `${baseUrl}${product.imageUri}` : product.imageUri,
     quantity: product.quantity,
+    memo: product.memo,
     status: product.status,
     completedAt: product.completedAt,
   };
