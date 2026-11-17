@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  clearRecords as clearRemoteRecords,
   createHold as createRemoteHold,
   createProduct as createRemoteProduct,
   deleteProduct as deleteRemoteProduct,
@@ -290,7 +291,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     if (isRemote) {
       await deleteRemoteProduct(id);
       setRemoteProducts((current) => current.filter((item) => item.id !== id));
-      setRemoteRecords((current) => current.filter((record) => record.productId !== id));
+      // 서버와 같이: 기록은 남기고 제품 연결만 끊음
+      setRemoteRecords((current) => current.map((record) => record.productId === id ? { ...record, productId: undefined } : record));
     }
     setS((x) => ({
       ...x,
@@ -311,6 +313,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const setDevRegisterFail = useCallback((devRegisterFail: State['devRegisterFail']) => setS((x) => ({ ...x, devRegisterFail })), []);
   const reset = useCallback(async () => {
     await Promise.all(remoteProducts.map((item) => deleteRemoteProduct(item.id)));
+    await clearRemoteRecords();
     setRemoteProducts([]);
     setRemoteRecords([]);
     setS(SEED);

@@ -34,6 +34,9 @@ export type PurchaseAnalysis = {
   query: string;
   verdict: 'same' | 'similar' | 'none';
   matches: { productId: string; similarity: number }[];
+  /** 판정된 보유 제품과 용량·함량이 다른 항목 (예: 보유 1000IU · 구매 예정 2000IU) */
+  specDifference?: { unit: string; query: string; owned: string }[];
+  matchedBy?: 'name' | 'embedding' | 'none';
   decision: 'BUY' | 'CHECK_FIRST' | 'HOLD';
   title: string;
   reason: string;
@@ -205,6 +208,12 @@ export async function listRecords() {
   const result = await apiRequest<{ records?: ActivityRecord[] }>('/api/records', { failMessage: '활동 기록을 불러오지 못했어요.' });
   failIf(result, result.ok && Array.isArray(result.payload.records), '활동 기록을 불러오지 못했어요.');
   return result.payload.records as ActivityRecord[];
+}
+
+/** 설정 > '모든 데이터 초기화' 전용: 다씀·구매 보류 기록 전체 삭제 */
+export async function clearRecords() {
+  const result = await apiRequest<{ deleted?: number }>('/api/records', { method: 'DELETE', failMessage: '활동 기록을 지우지 못했어요.' });
+  failIf(result, result.ok, '활동 기록을 지우지 못했어요.');
 }
 
 type DoneResponse = { product?: StoredProduct; records?: ActivityRecord[] };

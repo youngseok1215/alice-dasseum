@@ -68,8 +68,10 @@ export default function Result() {
         <T style={[tx(24, 32, 700), { marginTop: 10 }]}>{V.title}</T>
         <T style={[tx(15, 22, 400, C.alt), { marginTop: 4 }]}>{V.sub}</T>
 
-        {r.items.map((k) => {
+        {r.items.map((k, index) => {
           const p = product(k);
+          // 서버가 판정한 첫 번째 보유 제품과의 용량·함량 차이 (예: 보유 1000IU · 구매 예정 2000IU)
+          const specDiff = index === 0 && aiResult?.matches[0]?.productId === k ? aiResult.specDifference ?? [] : [];
           return (
             <Card key={k} style={{ marginTop: 20, padding: 16 }}>
               <View style={{ flexDirection: 'row', gap: 14 }}>
@@ -77,6 +79,11 @@ export default function Result() {
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <T style={tx(13, 18, 400, C.alt)}>{p.brand} · {p.cat}</T>
                   <T style={[tx(16, 24, 500), { marginTop: 2 }]}>{p.name}</T>
+                  {specDiff.length > 0 && (
+                    <T style={[tx(13, 18, 400, C.neutral), { marginTop: 4 }]}>
+                      {specDiff.map((d) => `보유 ${d.owned} · 구매 예정 ${d.query}`).join(' / ')}
+                    </T>
+                  )}
                 </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 16, marginTop: 14, paddingTop: 14 }}>
