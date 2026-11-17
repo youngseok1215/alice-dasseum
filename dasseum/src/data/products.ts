@@ -12,6 +12,9 @@ export interface Product {
   memo?: string;
   reason?: string;
   imageUri?: string;
+  quantity?: number;
+  status?: 'owned' | 'done';
+  completedAt?: string | null;
 }
 
 function dotDate(date: Date) {
