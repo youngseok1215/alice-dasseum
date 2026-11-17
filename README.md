@@ -14,6 +14,21 @@
 
 API 키와 `.env`, `backend/.data/`, 업로드 사진은 Git에 올리지 않습니다.
 
+## Gemini 유사 제품·AI 구매 분석
+
+`feature/semantic-purchase-analysis` 브랜치는 구매 예정 제품과 SQLite에 등록된 보유 제품을 Gemini 임베딩으로 비교합니다. 코사인 유사도로 동일·유사·없음을 판정한 뒤, 기존 엘리스 LLM이 보유 수량·사용기한·구매 목적을 바탕으로 구매 판단 근거를 생성합니다. 엘리스 설정이 없을 때는 Gemini가 설명 생성을 대신합니다.
+
+백엔드를 시작할 PowerShell에서 Gemini 키를 환경 변수로 입력하세요. 키를 코드나 GitHub에 저장하지 않습니다.
+
+```powershell
+cd "$env:USERPROFILE\Projects\alice-dasseum-final"
+$env:GEMINI_API_KEY = Read-Host "Gemini API 키 입력"
+$env:GEMINI_API_KEY.Length
+node .\backend\server.mjs
+```
+
+정상적으로 설정되면 길이가 0보다 큰 숫자로 표시됩니다. Expo 터미널에는 Gemini 키를 입력하지 않습니다. Expo 앱은 `EXPO_PUBLIC_API_URL`을 통해 백엔드의 `POST /api/purchase-analysis`만 호출합니다.
+
 ## 반영 버전: dasseum_app_1113_v1.zip
 
 전달받은 `dasseum_app_1113_v1.zip`의 최신 프런트엔드 코드와 패키지 파일을 `dasseum/`에 반영했습니다. 기존 `dassem/`, `backend/`, 유저플로우 차트 및 Git 연습 문서는 유지합니다. README는 실제 반영 내용과 현재 제한을 설명하도록 별도로 보완했습니다.
