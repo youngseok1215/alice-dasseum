@@ -1,4 +1,4 @@
-import { fetchWithRetry, isTimeout } from './http-util.mjs';
+import { fetchWithRetry, geminiBaseUrl, isTimeout } from './http-util.mjs';
 
 export async function recognizeProduct(image, categories) {
   if (typeof image !== 'string' || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(image)) {
@@ -22,7 +22,7 @@ export async function recognizeProduct(image, categories) {
     let endpoint;
     if (geminiKey) {
       const [mimeType, data] = image.slice('data:'.length).split(';base64,');
-      endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
+      endpoint = `${geminiBaseUrl()}/v1beta/models/gemini-3.5-flash-lite:generateContent`;
       options.headers['x-goog-api-key'] = geminiKey;
       options.body = JSON.stringify({
         contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],

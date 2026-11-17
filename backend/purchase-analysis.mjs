@@ -1,7 +1,10 @@
-import { fetchWithRetry } from './http-util.mjs';
+import { fetchWithRetry, geminiBaseUrl } from './http-util.mjs';
+import { specDifferences, specVerdict } from './product-spec.mjs';
 
-const embeddingModel = 'gemini-embedding-001';
+export const embeddingModel = 'gemini-embedding-001';
+export const embeddingDimensions = 768;
 const adviceModel = 'gemini-3.5-flash-lite';
+// 같은 요청 안에서 중복 호출을 막는 메모리 캐시(텍스트 → Promise). 영구 저장은 embedding-store.mjs.
 const embeddingCache = new Map();
 
 function compact(value) {
@@ -38,7 +41,7 @@ function cosine(left, right) {
 
 async function embedText(text, apiKey) {
   const response = await fetchWithRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/${embeddingModel}:embedContent`,
+    `${geminiBaseUrl()}/v1beta/models/${embeddingModel}:embedContent`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -46,7 +49,7 @@ async function embedText(text, apiKey) {
         model: `models/${embeddingModel}`,
         content: { parts: [{ text }] },
         taskType: 'SEMANTIC_SIMILARITY',
-        outputDimensionality: 768,
+        outputDimensionality: embeddingDimensions,
       }),
     },
     { timeoutMs: 10_000, retries: 1, label: 'Gemini embedding' },
@@ -59,18 +62,35 @@ async function embedText(text, apiKey) {
   return payload.embedding.values;
 }
 
-async function productEmbedding(product, apiKey) {
-  const key = `${product.id}:${product.brand ?? ''}:${product.name}:${product.category}`;
-  if (!embeddingCache.has(key)) embeddingCache.set(key, embedText(productText(product), apiKey));
+/** 메모리 → SQLite 캐시 → Gemini 순서로 임베딩을 찾습니다. 실패한 요청은 캐시에 남기지 않습니다. */
+async function cachedEmbedding(text, apiKey, store, stats) {
+  if (!embeddingCache.has(text)) {
+    embeddingCache.set(text, (async () => {
+      const saved = store?.get(text);
+      if (saved) { stats.cached += 1; return saved; }
+      const vector = await embedText(text, apiKey);
+      stats.requested += 1;
+      store?.set(text, vector);
+      return vector;
+    })());
+    // 메모리 캐시는 최근 500개까지만 유지
+    if (embeddingCache.size > 500) embeddingCache.delete(embeddingCache.keys().next().value);
+  } else {
+    stats.cached += 1;
+  }
   try {
-    return await embeddingCache.get(key);
+    return await embeddingCache.get(text);
   } catch (error) {
-    embeddingCache.delete(key);
+    embeddingCache.delete(text);
     throw error;
   }
 }
 
-function defaultAdvice(verdict, match, query) {
+function specSentence(differences) {
+  return differences.map(({ unit, owned, query }) => `보유 제품은 ${owned}, 구매 예정 제품은 ${query}로 ${unit} 규격이 달라요.`).join(' ');
+}
+
+function defaultAdvice(verdict, match, query, differences = []) {
   if (verdict === 'none') {
     return {
       decision: 'BUY',
@@ -79,6 +99,13 @@ function defaultAdvice(verdict, match, query) {
     };
   }
   const expiry = match.expiresAt ? ` 사용기한은 ${match.expiresAt}이에요.` : '';
+  if (verdict === 'similar' && differences.length) {
+    return {
+      decision: 'CHECK_FIRST',
+      title: '용량·규격만 다른 제품을 가지고 있어요',
+      reason: `‘${match.name}’을 보유하고 있어요. ${specSentence(differences)}${expiry} 지금 가진 제품으로 충분한지 확인한 뒤 구매를 결정해 주세요.`,
+    };
+  }
   return {
     decision: verdict === 'same' ? 'HOLD' : 'CHECK_FIRST',
     title: verdict === 'same' ? '같은 제품을 이미 가지고 있어요' : '비슷한 제품을 가지고 있어요',
@@ -99,14 +126,15 @@ function parseAdvice(content) {
   };
 }
 
-async function generateAdvice({ query, purpose, verdict, match, similarity }) {
-  const fallback = defaultAdvice(verdict, match, query);
+async function generateAdvice({ query, purpose, verdict, match, similarity, differences = [] }) {
+  const fallback = defaultAdvice(verdict, match, query, differences);
   const prompt = `당신은 중복 구매 방지 앱의 구매 판단 도우미입니다. 아래 정보만 사용해 짧고 구체적인 한국어 안내를 만드세요.
 구매 예정 제품: ${query}
 구매 목적: ${purpose || '입력하지 않음'}
 판정: ${verdict}
 유사도: ${similarity ?? 0}
 보유 제품: ${match ? JSON.stringify({ name: match.name, brand: match.brand, category: match.category, quantity: match.quantity, openedAt: match.openedAt, expiresAt: match.expiresAt }) : '없음'}
+규격 차이: ${differences.length ? specSentence(differences) : '없음'}
 
 decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약품은 효능, 복용량, 대체 가능 여부를 판단하지 말고 제품명·보유 수량·사용기한 확인만 권하세요. JSON 이외의 문장은 출력하지 마세요.
 {"decision":"CHECK_FIRST","title":"한 줄 제목","reason":"두세 문장 근거"}`;
@@ -132,7 +160,7 @@ decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약
     } else if (process.env.GEMINI_API_KEY?.trim()) {
       provider = 'Gemini';
       response = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/${adviceModel}:generateContent`,
+        `${geminiBaseUrl()}/v1beta/models/${adviceModel}:generateContent`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY.trim() },
@@ -158,7 +186,10 @@ decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약
   }
 }
 
-export async function analyzePurchase(query, purpose, products) {
+/**
+ * @param {{ embeddingStore?: ReturnType<typeof import('./embedding-store.mjs').createEmbeddingStore> }} [options]
+ */
+export async function analyzePurchase(query, purpose, products, { embeddingStore } = {}) {
   if (typeof query !== 'string' || !query.trim() || query.trim().length > 200) {
     return { status: 400, result: { error: '검색어는 1~200자로 입력해 주세요.' } };
   }
@@ -176,11 +207,13 @@ export async function analyzePurchase(query, purpose, products) {
     const candidates = queryCategory
       ? products.filter((product) => product.category === queryCategory)
       : products;
-    const queryEmbedding = await embedText(trimmed, apiKey);
+    const stats = { cached: 0, requested: 0 };
+    const queryEmbedding = await cachedEmbedding(trimmed, apiKey, embeddingStore, stats);
     const ranked = await Promise.all(candidates.map(async (product) => ({
       product,
-      similarity: cosine(queryEmbedding, await productEmbedding(product, apiKey)),
+      similarity: cosine(queryEmbedding, await cachedEmbedding(productText(product), apiKey, embeddingStore, stats)),
     })));
+    console.log(`[purchase analysis] 후보 ${candidates.length}개 · 임베딩 캐시 ${stats.cached} · 새 요청 ${stats.requested}`);
     ranked.sort((left, right) => right.similarity - left.similarity);
     const top = ranked[0];
     const queryKey = compact(trimmed);
@@ -188,18 +221,44 @@ export async function analyzePurchase(query, purpose, products) {
     const productNameKey = top ? compact(top.product.name) : '';
     const exact = Boolean(top && (queryKey === productKey || queryKey === productNameKey));
     const similarityThreshold = 0.8;
-    const verdict = exact ? 'same' : !top || top.similarity < similarityThreshold ? 'none' : 'similar';
-    const selected = verdict === 'none'
-      ? []
-      : verdict === 'same'
-        ? [top]
-        : ranked.filter((item) => item.similarity >= Math.max(similarityThreshold, top.similarity - 0.05)).slice(0, 3);
+
+    // 규격 규칙: 용량·함량 표기를 뺀 이름이 같은 보유 제품이 있으면 임베딩 점수보다 우선합니다.
+    // (카테고리 추정과 상관없이 전체 보유 제품에서 찾음 — 문자열 비교라 비용이 없음)
+    const ruleMatches = products
+      .map((product) => ({ product, verdict: specVerdict(trimmed, product) }))
+      .filter((item) => item.verdict);
+    const rule = ruleMatches.find((item) => item.verdict === 'same') ?? ruleMatches[0];
+    const similarityOf = async (product) => ranked.find((item) => item.product.id === product.id)?.similarity
+      ?? cosine(queryEmbedding, await cachedEmbedding(productText(product), apiKey, embeddingStore, stats));
+
+    let verdict;
+    let selected;
+    if (exact) {
+      verdict = 'same';
+      selected = [top];
+    } else if (rule) {
+      verdict = rule.verdict;
+      selected = [{ product: rule.product, similarity: await similarityOf(rule.product) }];
+    } else if (!top || top.similarity < similarityThreshold) {
+      verdict = 'none';
+      selected = [];
+    } else {
+      verdict = 'similar';
+      selected = ranked.filter((item) => item.similarity >= Math.max(similarityThreshold, top.similarity - 0.05)).slice(0, 3);
+    }
+    const matched = selected[0]?.product;
+    const differences = matched
+      ? (specDifferences(trimmed, productText(matched)).length
+        ? specDifferences(trimmed, productText(matched))
+        : specDifferences(trimmed, matched.name))
+      : [];
     const advice = await generateAdvice({
       query: trimmed,
       purpose: purpose?.trim(),
       verdict,
-      match: selected[0]?.product,
+      match: matched,
       similarity: selected[0] ? Number(selected[0].similarity.toFixed(3)) : undefined,
+      differences,
     });
     return {
       status: 200,
@@ -210,6 +269,9 @@ export async function analyzePurchase(query, purpose, products) {
           productId: product.id,
           similarity: Number(similarity.toFixed(3)),
         })),
+        // 예: [{ unit: 'IU', query: '2000IU', owned: '1000IU' }] — 판정된 첫 번째 보유 제품 기준
+        specDifference: differences,
+        matchedBy: exact || rule ? 'name' : verdict === 'none' ? 'none' : 'embedding',
         ...advice,
         embeddingProvider: 'Gemini',
       },

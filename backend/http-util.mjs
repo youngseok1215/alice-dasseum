@@ -1,6 +1,11 @@
 // 외부 API(Gemini·카카오·Google Vision) 공통 호출: 요청마다 타임아웃, 일시적 실패만 제한적으로 재시도.
 // 무한 재시도를 막기 위해 retries 최대값을 2로 고정합니다.
 
+/** Gemini API 기본 주소. 자동 테스트에서만 GEMINI_API_BASE_URL로 가짜 서버를 지정합니다. */
+export function geminiBaseUrl() {
+  return (process.env.GEMINI_API_BASE_URL?.trim() || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
+}
+
 const RETRYABLE_STATUS = new Set([500, 502, 503, 504]);
 const MAX_RETRIES = 2;
 
