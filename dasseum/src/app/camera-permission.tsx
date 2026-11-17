@@ -1,4 +1,4 @@
-import * as ImagePicker from 'expo-image-picker';
+import { Camera } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Linking, View } from 'react-native';
 import { nav, Screen, useToast } from '@/components/shell';
@@ -13,7 +13,7 @@ export default function CameraPermission() {
   const toast = useToast();
   const denied = cameraPermission === 'denied';
   const allow = async () => {
-    const result = await ImagePicker.requestCameraPermissionsAsync();
+    const result = await Camera.requestCameraPermissionsAsync();
     const state = result.granted ? 'granted' : 'denied';
     setCameraPermission(state);
     if (result.granted) router.replace({ pathname: '/camera', params: register ? { purpose: 'register' } : {} });
