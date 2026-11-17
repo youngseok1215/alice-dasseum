@@ -5,6 +5,7 @@ import { Pressable, View } from 'react-native';
 import { nav, Screen, Scroll } from '@/components/shell';
 import { Card, DBadge, Line, ProdImg, T, TopBar } from '@/components/ui';
 import { CATEGORIES, isCurrentMonth } from '@/data/products';
+import { SyncBanner } from '@/components/sync-banner';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
@@ -47,6 +48,7 @@ export default function Records() {
     <Screen>
       <TopBar title="다씀 기록" onBack={nav.back} />
       <Scroll style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 4, paddingHorizontal: 20, paddingBottom: 28 }}>
+        <SyncBanner style={{ marginHorizontal: 0, marginBottom: 12 }} />
         <View style={{ flexDirection: 'row', padding: 3, borderRadius: 10, backgroundColor: C.fillNormal }}>{seg('month', '이번 달')}{seg('all', '전체')}</View>
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
           {stat('다씀', doneN, '개')}
@@ -74,6 +76,18 @@ export default function Records() {
             </Pressable>
           ))}
         </View>
+        {visibleRecords.length === 0 && (
+          <View style={{ alignItems: 'center', paddingVertical: 40, gap: 6 }}>
+            <T style={[tx(15, 22, 600, C.neutral), { textAlign: 'center' }]}>
+              {tab === 'hold' ? '아직 구매를 미룬 기록이 없어요' : '아직 다 쓴 제품이 없어요'}
+            </T>
+            <T style={[tx(13, 18, 400, C.alt), { textAlign: 'center' }]}>
+              {month
+                ? '이번 달 기록이 없으면 ‘전체’에서 지난 기록을 볼 수 있어요.'
+                : tab === 'hold' ? '구매 전 확인에서 ‘구매 보류’를 누르면 여기에 남아요.' : '제품 상세에서 ‘다씀’을 누르면 여기에 남아요.'}
+            </T>
+          </View>
+        )}
         {visibleRecords.map((it, i) => (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
             <Line at="bottom" />

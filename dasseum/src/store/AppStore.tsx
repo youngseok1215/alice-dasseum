@@ -59,6 +59,10 @@ interface Store extends State {
   setProductQuantity: (id: string, quantity: number) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   refreshProducts: () => Promise<void>;
+  /** 서버에서 제품·기록을 불러오지 못했을 때의 안내 문구 (성공하면 null) */
+  syncError: string | null;
+  /** 앱 시작 직후 첫 불러오기가 끝났는지 — 끝나기 전에는 '등록한 제품 없음'을 보여주지 않습니다. */
+  synced: boolean;
   setNotifyEnabled: (value: boolean) => void;
   setCameraPermission: (value: State['cameraPermission']) => void;
   markAlertRead: (id: string) => void;
@@ -80,6 +84,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [remoteProducts, setRemoteProducts] = useState<Product[]>([]);
   const [remoteRecords, setRemoteRecords] = useState<ActivityRecord[]>([]);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [synced, setSynced] = useState(false);
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -92,10 +98,19 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     if (loaded.current) AsyncStorage.setItem(KEY, JSON.stringify(s)).catch(() => {});
   }, [s]);
 
+  // 실패하면 기존 목록은 그대로 두고 안내 문구만 남깁니다 (빈 목록으로 덮어쓰지 않음).
   const refreshProducts = useCallback(async () => {
-    const [items, records] = await Promise.all([listProducts(), listRecords()]);
-    setRemoteProducts(items);
-    setRemoteRecords(records);
+    try {
+      const [items, records] = await Promise.all([listProducts(), listRecords()]);
+      setRemoteProducts(items);
+      setRemoteRecords(records);
+      setSyncError(null);
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : '제품 목록을 불러오지 못했어요.');
+      throw error;
+    } finally {
+      setSynced(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -105,8 +120,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         if (!active) return;
         setRemoteProducts(items);
         setRemoteRecords(records);
+        setSyncError(null);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (active) setSyncError(error instanceof Error ? error.message : '제품 목록을 불러오지 못했어요.');
+      })
+      .finally(() => { if (active) setSynced(true); });
     return () => { active = false; };
   }, []);
 
@@ -319,6 +338,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setProductQuantity,
     deleteProduct,
     refreshProducts,
+    syncError,
+    synced,
     setNotifyEnabled,
     setCameraPermission,
     markAlertRead,
@@ -327,7 +348,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setDevPhotoVerdict,
     setDevRegisterFail,
     reset,
-  }), [s, ready, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, hasProduct, products, registerProduct, updateProduct, setProductQuantity, deleteProduct, refreshProducts, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
+  }), [s, ready, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, hasProduct, products, registerProduct, updateProduct, setProductQuantity, deleteProduct, refreshProducts, syncError, synced, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

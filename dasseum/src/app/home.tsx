@@ -5,6 +5,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { Screen, Scroll } from '@/components/shell';
 import { Card, DBadge, ddayBadge, Icon, IconBtn, Line, Mascot, Press, ProdImg, SectionHead, T } from '@/components/ui';
 import { byDday, reasonOf } from '@/data/products';
+import { SyncBanner } from '@/components/sync-banner';
 import { useApp } from '@/store/AppStore';
 import { BRAND_FONT, C, tx } from '@/theme/tokens';
 
@@ -28,6 +29,7 @@ export default function Home() {
           </View>
           <IconBtn name="bell" label="사용기한 알림" dot={notifyEnabled && !alertsSeen} onPress={() => { markAlertsSeen(); router.push('/alerts'); }} />
         </View>
+        <SyncBanner style={{ marginHorizontal: 20, marginBottom: 8 }} />
 
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 4, paddingRight: 12, paddingBottom: 20, paddingLeft: 20, marginTop: -10 }}>
           <View style={{ flex: 1, minWidth: 0 }}>

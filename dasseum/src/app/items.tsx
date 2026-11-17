@@ -5,16 +5,27 @@ import { ScrollView, View } from 'react-native';
 import { Screen, Scroll } from '@/components/shell';
 import { DBadge, DButton, ddayBadge, Hair, Icon, Line, Press, ProdImg, T } from '@/components/ui';
 import { byDday, CATEGORIES } from '@/data/products';
+import { SyncBanner } from '@/components/sync-banner';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
 const CATS = ['전체', ...CATEGORIES];
 
 export default function Items() {
-  const { products, completed } = useApp();
+  const { products, completed, syncError, synced } = useApp();
   const [cat, setCat] = useState('전체');
   const all = products().filter((p) => !completed.includes(p.id)).sort(byDday);
   const list = cat === '전체' ? all : all.filter((p) => p.cat === cat);
+
+  // 서버에서 아직 못 불러왔거나 실패했으면 '등록한 제품이 없어요'로 오해하지 않게 따로 안내합니다.
+  if (all.length === 0 && (!synced || syncError)) return (
+    <Screen tab="items">
+      <View style={{ paddingTop: 16, paddingHorizontal: 20 }}><T style={tx(24, 32, 700)}>내 제품 목록</T></View>
+      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 20, paddingBottom: 40 }}>
+        {syncError ? <SyncBanner /> : <T style={[tx(15, 22, 400, C.alt), { textAlign: 'center' }]}>내 물품을 불러오고 있어요…</T>}
+      </View>
+    </Screen>
+  );
 
   // 보유 제품 0개 — 프로토타입 '내 물품 · 0개' 화면
   if (all.length === 0) return (
@@ -38,6 +49,7 @@ export default function Items() {
         <View style={{ paddingTop: 16, paddingHorizontal: 20 }}>
           <T style={tx(24, 32, 700)}>내 제품 목록</T>
           <T style={[tx(14, 20, 400, C.alt), { marginTop: 4 }]}>보유 제품 {all.length}개 · 사용기한 임박순</T>
+          <SyncBanner style={{ marginTop: 12 }} />
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 8 }}>
           {CATS.map((c) => {
