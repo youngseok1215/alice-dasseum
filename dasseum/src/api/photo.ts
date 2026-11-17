@@ -26,3 +26,46 @@ export async function toUploadDataUri(asset: ImagePickerAsset) {
     throw new Error('사진을 처리하지 못했어요. 다른 사진으로 다시 시도해 주세요.');
   }
 }
+
+type Size = { width: number; height: number };
+type Rect = Size & { x: number; y: number };
+
+/**
+ * 앱 안 카메라로 찍은 사진에서 화면의 촬영 틀 부분만 잘라 업로드용 data URI로 만듭니다.
+ * 미리보기는 화면을 꽉 채우도록(cover) 확대되어 보이므로, 같은 비율로 화면 좌표를 사진 좌표로 바꿉니다.
+ * 틀에 딱 맞게 자르면 글자 끝이 잘릴 수 있어 사방으로 `margin`(틀 크기 대비 비율)만큼 여유를 둡니다.
+ */
+export async function cropToFrame(picture: Size & { uri: string }, view: Size, frame: Rect, margin = 0.08) {
+  const { width: pw, height: ph } = picture;
+  let crop: Rect | null = null;
+  if (pw > 0 && ph > 0 && view.width > 0 && view.height > 0) {
+    const scale = Math.max(view.width / pw, view.height / ph);
+    const offsetX = (pw * scale - view.width) / 2;
+    const offsetY = (ph * scale - view.height) / 2;
+    const mx = frame.width * margin;
+    const my = frame.height * margin;
+    const left = Math.max(0, Math.floor((frame.x - mx + offsetX) / scale));
+    const top = Math.max(0, Math.floor((frame.y - my + offsetY) / scale));
+    const right = Math.min(pw, Math.ceil((frame.x + frame.width + mx + offsetX) / scale));
+    const bottom = Math.min(ph, Math.ceil((frame.y + frame.height + my + offsetY) / scale));
+    // 계산이 이상하면(사진 방향이 미리보기와 다른 경우 등) 자르지 않고 전체 사진을 씁니다.
+    if (right - left >= 64 && bottom - top >= 32) crop = { x: left, y: top, width: right - left, height: bottom - top };
+  }
+  try {
+    const context = ImageManipulator.manipulate(picture.uri);
+    let size: Size = { width: pw, height: ph };
+    if (crop) {
+      context.crop({ originX: crop.x, originY: crop.y, width: crop.width, height: crop.height });
+      size = crop;
+    }
+    if (Math.max(size.width, size.height) > MAX_EDGE) {
+      context.resize(size.width >= size.height ? { width: MAX_EDGE } : { height: MAX_EDGE });
+    }
+    const image = await context.renderAsync();
+    const saved = await image.saveAsync({ base64: true, compress: 0.85, format: SaveFormat.JPEG });
+    if (!saved.base64) throw new Error('empty');
+    return `data:image/jpeg;base64,${saved.base64}`;
+  } catch {
+    throw new Error('사진을 처리하지 못했어요. 다시 찍어 주세요.');
+  }
+}
