@@ -173,8 +173,9 @@ export async function analyzePurchase(query, purpose, products) {
     const top = ranked[0];
     const queryKey = compact(trimmed);
     const productKey = top ? compact(`${top.product.brand ?? ''}${top.product.name}`) : '';
-    const exact = Boolean(top && (queryKey === productKey || (queryKey.length >= 4 && productKey.includes(queryKey))));
-    const verdict = !top || top.similarity < 0.68 ? 'none' : exact || top.similarity >= 0.92 ? 'same' : 'similar';
+    const productNameKey = top ? compact(top.product.name) : '';
+    const exact = Boolean(top && (queryKey === productKey || queryKey === productNameKey));
+    const verdict = !top || top.similarity < 0.68 ? 'none' : exact ? 'same' : 'similar';
     const selected = verdict === 'none'
       ? []
       : ranked.filter((item) => item.similarity >= Math.max(0.68, top.similarity - 0.08)).slice(0, 3);
