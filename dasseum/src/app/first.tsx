@@ -3,13 +3,13 @@ import { router } from 'expo-router';
 import { View } from 'react-native';
 import { nav, Screen, Scroll } from '@/components/shell';
 import { DBadge, Icon, Line, Press, ProdImg, T, TopBar } from '@/components/ui';
-import { byDday, FIRST_IDS, reasonOf } from '@/data/products';
+import { byDday, reasonOf } from '@/data/products';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
 export default function First() {
-  const { product, completed } = useApp();
-  const list = FIRST_IDS.filter((k) => !completed.includes(k)).map(product).filter((p) => reasonOf(p)).sort(byDday);
+  const { products, completed } = useApp();
+  const list = products().filter((p) => !completed.includes(p.id) && reasonOf(p)).sort(byDday);
   return (
     <Screen>
       <TopBar title="먼저 써야 할 제품" onBack={nav.back} />
