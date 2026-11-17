@@ -32,6 +32,21 @@ database.exec(`
 const productColumns = new Set(database.prepare('PRAGMA table_info(products)').all().map((column) => column.name));
 if (!productColumns.has('brand')) database.exec('ALTER TABLE products ADD COLUMN brand TEXT');
 if (!productColumns.has('imageUri')) database.exec('ALTER TABLE products ADD COLUMN imageUri TEXT');
+if (!productColumns.has('status')) database.exec("ALTER TABLE products ADD COLUMN status TEXT NOT NULL DEFAULT 'owned'");
+if (!productColumns.has('completedAt')) database.exec('ALTER TABLE products ADD COLUMN completedAt TEXT');
+
+database.exec(`
+  CREATE TABLE IF NOT EXISTS activity_records (
+    id TEXT PRIMARY KEY NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('hold', 'done')),
+    productId TEXT,
+    name TEXT NOT NULL,
+    category TEXT,
+    match TEXT,
+    query TEXT,
+    createdAt TEXT NOT NULL
+  ) STRICT
+`);
 
 const insert = database.prepare(`
   INSERT INTO products (id, name, brand, category, quantity, openedAt, expiresAt, imageUri, createdAt)
@@ -45,6 +60,27 @@ const update = database.prepare(`
   WHERE id = ?
 `);
 const remove = database.prepare('DELETE FROM products WHERE id = ?');
+const listOwned = database.prepare("SELECT * FROM products WHERE status = 'owned' ORDER BY createdAt DESC, rowid DESC");
+const setProductStatus = database.prepare('UPDATE products SET status = ?, completedAt = ? WHERE id = ?');
+const listRecords = database.prepare('SELECT * FROM activity_records ORDER BY createdAt DESC, rowid DESC');
+const insertRecord = database.prepare(`
+  INSERT INTO activity_records (id, type, productId, name, category, match, query, createdAt)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const removeDoneRecords = database.prepare("DELETE FROM activity_records WHERE type = 'done' AND productId = ?");
+const removeProductRecords = database.prepare('DELETE FROM activity_records WHERE productId = ?');
+
+function transaction(work) {
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    const result = work();
+    database.exec('COMMIT');
+    return result;
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}
 
 function send(response, status, body) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -61,13 +97,24 @@ function sendImage(response, path) {
   response.end(readFileSync(path));
 }
 
-function publicProduct({ openedAt, expiresAt, brand, imageUri, ...product }) {
+function publicProduct({ openedAt, expiresAt, completedAt, brand, imageUri, ...product }) {
   return {
     ...product,
     openedAt: openedAt ?? undefined,
     expiresAt: expiresAt ?? undefined,
+    completedAt: completedAt ?? undefined,
     brand: brand ?? undefined,
     imageUri: imageUri ?? undefined,
+  };
+}
+
+function publicRecord({ category, match, query, productId, ...record }) {
+  return {
+    ...record,
+    productId: productId ?? undefined,
+    category: category ?? undefined,
+    match: match ?? undefined,
+    query: query ?? undefined,
   };
 }
 
@@ -268,10 +315,12 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const path = url.pathname;
     const imageMatch = /^\/api\/images\/([0-9a-f-]+\.(?:jpg|jpeg|png|webp))$/i.exec(path);
+    const doneMatch = /^\/api\/products\/([0-9a-f-]+)\/done$/i.exec(path);
     const productMatch = /^\/api\/products\/([0-9a-f-]+)$/i.exec(path);
     const knownPath = path === '/api/products' || path === '/api/products/recognize' ||
-      path === '/api/purchase-analysis' ||
-      path === '/api/products/images' || path === '/api/products/images/search' || imageMatch || productMatch;
+      path === '/api/purchase-analysis' || path === '/api/records' || path === '/api/holds' ||
+      path === '/api/products/images' || path === '/api/products/images/search' ||
+      imageMatch || doneMatch || productMatch;
     if (!knownPath) return send(response, 404, { error: 'Not found' });
 
     const origin = request.headers.origin;
@@ -297,10 +346,28 @@ const server = createServer(async (request, response) => {
       const products = list.all().map(publicProduct);
       return send(response, 200, { products });
     }
+    if (request.method === 'GET' && path === '/api/records') {
+      return send(response, 200, { records: listRecords.all().map(publicRecord) });
+    }
+    if (request.method === 'DELETE' && doneMatch) {
+      const existing = findById.get(doneMatch[1]);
+      if (!existing) return send(response, 404, { error: 'Product not found' });
+      transaction(() => {
+        setProductStatus.run('owned', null, doneMatch[1]);
+        removeDoneRecords.run(doneMatch[1]);
+      });
+      return send(response, 200, {
+        product: publicProduct(findById.get(doneMatch[1])),
+        records: listRecords.all().map(publicRecord),
+      });
+    }
     if (request.method === 'DELETE' && productMatch) {
       const existing = findById.get(productMatch[1]);
       if (!existing) return send(response, 404, { error: 'Product not found' });
-      remove.run(productMatch[1]);
+      transaction(() => {
+        removeProductRecords.run(productMatch[1]);
+        remove.run(productMatch[1]);
+      });
       return send(response, 200, { deleted: true });
     }
     if (request.method !== 'POST' && request.method !== 'PATCH') {
@@ -312,6 +379,36 @@ const server = createServer(async (request, response) => {
       path === '/api/products/images/search';
     const body = await readJson(request, response, largeBody ? maxImageBytes + 1024 : 16_384);
     if (body === undefined) return;
+
+    if (request.method === 'POST' && doneMatch) {
+      const existing = findById.get(doneMatch[1]);
+      if (!existing) return send(response, 404, { error: 'Product not found' });
+      const completedAt = new Date().toISOString();
+      transaction(() => {
+        setProductStatus.run('done', completedAt, doneMatch[1]);
+        removeDoneRecords.run(doneMatch[1]);
+        insertRecord.run(randomUUID(), 'done', doneMatch[1], existing.name, existing.category,
+          null, null, completedAt);
+      });
+      return send(response, 200, {
+        product: publicProduct(findById.get(doneMatch[1])),
+        records: listRecords.all().map(publicRecord),
+      });
+    }
+    if (request.method === 'POST' && path === '/api/holds') {
+      const productId = typeof body?.productId === 'string' ? body.productId : '';
+      const existing = findById.get(productId);
+      if (!existing || existing.status === 'done') {
+        return send(response, 404, { error: 'Owned product not found' });
+      }
+      const verdict = body?.verdict === 'same' ? 'same' : body?.verdict === 'similar' ? 'similar' : undefined;
+      const query = optionalText(body?.query, 'query', 200);
+      if (!verdict) return send(response, 400, { error: 'verdict is invalid' });
+      const createdAt = new Date().toISOString();
+      insertRecord.run(randomUUID(), 'hold', productId, existing.name, existing.category,
+        verdict, query ?? null, createdAt);
+      return send(response, 201, { records: listRecords.all().map(publicRecord) });
+    }
 
     if (request.method === 'PATCH' && productMatch) {
       const existing = findById.get(productMatch[1]);
@@ -341,7 +438,7 @@ const server = createServer(async (request, response) => {
       return send(response, status, result);
     }
     if (path === '/api/purchase-analysis') {
-      const products = list.all().map(publicProduct);
+      const products = listOwned.all().map(publicProduct);
       const { status, result } = await analyzePurchase(body?.query, body?.purpose, products);
       return send(response, status, result);
     }
