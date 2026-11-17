@@ -5,6 +5,7 @@ import { extname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { recognizeProduct } from './product-vision.mjs';
+import { analyzePurchase } from './purchase-analysis.mjs';
 
 const categories = ['화장품', '영양제', '의약품', '생활용품'];
 const maxImageBytes = 5 * 1024 * 1024;
@@ -218,6 +219,7 @@ const server = createServer(async (request, response) => {
     const imageMatch = /^\/api\/images\/([0-9a-f-]+\.(?:jpg|jpeg|png|webp))$/i.exec(path);
     const productMatch = /^\/api\/products\/([0-9a-f-]+)$/i.exec(path);
     const knownPath = path === '/api/products' || path === '/api/products/recognize' ||
+      path === '/api/purchase-analysis' ||
       path === '/api/products/images' || path === '/api/products/images/search' || imageMatch || productMatch;
     if (!knownPath) return send(response, 404, { error: 'Not found' });
 
@@ -285,6 +287,11 @@ const server = createServer(async (request, response) => {
 
     if (path === '/api/products/recognize') {
       const { status, result } = await recognizeProduct(body?.image, categories);
+      return send(response, status, result);
+    }
+    if (path === '/api/purchase-analysis') {
+      const products = list.all().map(publicProduct);
+      const { status, result } = await analyzePurchase(body?.query, body?.purpose, products);
       return send(response, status, result);
     }
     if (path === '/api/products/images/search') {
