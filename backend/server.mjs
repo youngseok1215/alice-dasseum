@@ -48,7 +48,8 @@ for (const [column, sql] of columnMigrations) {
   database.exec(sql);
   addedColumns.push(column);
 }
-console.log(addedColumns.length
+if (!databaseExisted) console.log('[db] 새 DB에 products 테이블 생성');
+else console.log(addedColumns.length
   ? `[db] 마이그레이션: products 테이블에 ${addedColumns.join(', ')} 열 추가 (기존 데이터 유지)`
   : '[db] 마이그레이션: products 테이블 최신 상태');
 const hadActivityTable = Boolean(database.prepare(
@@ -67,7 +68,7 @@ database.exec(`
     createdAt TEXT NOT NULL
   ) STRICT
 `);
-if (!hadActivityTable) console.log('[db] 마이그레이션: activity_records 테이블 생성 (다씀·구매 보류 기록)');
+if (!hadActivityTable && databaseExisted) console.log('[db] 마이그레이션: activity_records 테이블 생성 (다씀·구매 보류 기록)');
 console.log(`[db] 제품 ${database.prepare('SELECT COUNT(*) AS n FROM products').get().n}개, 기록 ${database.prepare('SELECT COUNT(*) AS n FROM activity_records').get().n}개`);
 
 const insert = database.prepare(`
