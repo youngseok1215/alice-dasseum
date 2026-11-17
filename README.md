@@ -14,6 +14,14 @@
 
 API 키와 `.env`, `backend/.data/`, 업로드 사진은 Git에 올리지 않습니다.
 
+## 배포·실행 (`feature/final-deployment`)
+
+서버 배포, 환경변수, `GET /api/health`, 데이터 영속성, 테스트 방법은 [DEPLOY.md](./DEPLOY.md)를 참고하세요.
+
+- 환경변수 예시: `backend/.env.example`, `dasseum/.env.example`
+- 백엔드 실행: `node --env-file=backend/.env backend/server.mjs` (Node 22.13+)
+- 백엔드 테스트: `node --test backend/test/api.test.mjs`
+
 ## Gemini 유사 제품·AI 구매 분석
 
 `feature/semantic-purchase-analysis` 브랜치는 구매 예정 제품과 SQLite에 등록된 보유 제품을 Gemini 임베딩으로 비교합니다. 코사인 유사도로 동일·유사·없음을 판정한 뒤, 기존 엘리스 LLM이 보유 수량·사용기한·구매 목적을 바탕으로 구매 판단 근거를 생성합니다. 엘리스 설정이 없을 때는 Gemini가 설명 생성을 대신합니다.
