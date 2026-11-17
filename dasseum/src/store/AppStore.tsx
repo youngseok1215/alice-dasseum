@@ -37,6 +37,8 @@ type ProductForm = {
   manual?: boolean;
   brand?: string;
   imageUri?: string;
+  quantity?: number;
+  memo?: string;
 };
 
 interface Store extends State {
@@ -52,6 +54,7 @@ interface Store extends State {
   products: () => Product[];
   registerProduct: (form: ProductForm) => Promise<string>;
   updateProduct: (id: string, form: ProductForm) => Promise<void>;
+  setProductQuantity: (id: string, quantity: number) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   refreshProducts: () => Promise<void>;
   setNotifyEnabled: (value: boolean) => void;
@@ -189,6 +192,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       openedAt: apiDate(form.opened),
       expiresAt: apiDate(form.expires),
       imageUri: form.imageUri,
+      quantity: form.quantity ?? 1,
+      memo: form.memo,
     });
     setRemoteProducts((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
     return saved.id;
@@ -204,6 +209,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
         openedAt: apiDate(form.opened),
         expiresAt: apiDate(form.expires),
         imageUri: form.imageUri ?? product(id).imageUri,
+        quantity: form.quantity ?? product(id).quantity ?? 1,
+        memo: form.memo ?? product(id).memo ?? '',
       });
       setRemoteProducts((current) => current.map((item) => item.id === saved.id ? saved : item));
       return;
@@ -215,6 +222,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       opened: date(form.opened),
       expires: date(form.expires),
       dday: ddayOf(form.expires),
+      quantity: form.quantity ?? product(id).quantity ?? 1,
+      memo: form.memo ?? product(id).memo,
     };
     setS((x) => {
       const { [id]: _drop, ...openedOverrides } = x.openedOverrides;
@@ -228,6 +237,24 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       return { ...x, openedOverrides, productEdits: { ...x.productEdits, [id]: { ...x.productEdits[id], ...patch } } };
     });
   }, [product, remoteProducts]);
+
+  const setProductQuantity = useCallback(async (id: string, quantity: number) => {
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 999) {
+      throw new Error('수량은 1개부터 999개까지 입력해 주세요.');
+    }
+    const current = product(id);
+    const saved = await updateRemoteProduct(id, {
+      name: current.name,
+      brand: current.brand || undefined,
+      category: current.cat,
+      quantity,
+      openedAt: apiDate(current.opened),
+      expiresAt: apiDate(current.expires),
+      imageUri: current.imageUri,
+      memo: current.memo ?? '',
+    });
+    setRemoteProducts((items) => items.map((item) => item.id === saved.id ? saved : item));
+  }, [product]);
 
   const deleteProduct = useCallback(async (id: string) => {
     const isRemote = remoteProducts.some((item) => item.id === id);
@@ -278,6 +305,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     products,
     registerProduct,
     updateProduct,
+    setProductQuantity,
     deleteProduct,
     refreshProducts,
     setNotifyEnabled,
@@ -288,7 +316,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setDevPhotoVerdict,
     setDevRegisterFail,
     reset,
-  }), [s, ready, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, products, registerProduct, updateProduct, deleteProduct, refreshProducts, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
+  }), [s, ready, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, products, registerProduct, updateProduct, setProductQuantity, deleteProduct, refreshProducts, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
