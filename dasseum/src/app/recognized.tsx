@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { toUploadDataUri } from '@/api/photo';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -126,8 +127,7 @@ function RecognizedScreen() {
       }
       const options: ImagePicker.ImagePickerOptions = {
         mediaTypes: ['images'],
-        quality: 0.72,
-        base64: true,
+        quality: 0.9,
         allowsEditing: true,
         aspect: [1, 1],
       };
@@ -135,10 +135,7 @@ function RecognizedScreen() {
         ? ImagePicker.launchCameraAsync(options)
         : ImagePicker.launchImageLibraryAsync(options));
       if (result.canceled) return;
-      const asset = result.assets[0];
-      if (!asset.base64) throw new Error('사진을 읽지 못했어요.');
-      const mime = asset.mimeType && /^image\/(jpeg|png|webp)$/.test(asset.mimeType) ? asset.mimeType : 'image/jpeg';
-      const dataUri = `data:${mime};base64,${asset.base64}`;
+      const dataUri = await toUploadDataUri(result.assets[0]);
       userPickedImage.current = true;
       setImageChoice({ kind: 'captured', dataUri });
       setSearchingImages(true);

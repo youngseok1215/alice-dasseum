@@ -1,5 +1,6 @@
 // 3. 사진으로 확인 / 제품 등록 촬영
 import * as ImagePicker from 'expo-image-picker';
+import { toUploadDataUri } from '@/api/photo';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Alert, Pressable, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,14 +36,12 @@ export default function Camera() {
           return;
         }
       }
+      // 원본 base64는 받지 않고, 업로드 전에 줄인 사진만 base64로 만듭니다 (api/photo.ts).
       const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.75, base64: true })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75, base64: true });
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
       if (result.canceled) return;
-      const asset = result.assets[0];
-      if (!asset.base64) throw new Error('선택한 사진을 읽지 못했어요.');
-      const mime = asset.mimeType && /^image\/(jpeg|png|webp)$/.test(asset.mimeType) ? asset.mimeType : 'image/jpeg';
-      proceed(`data:${mime};base64,${asset.base64}`, source === 'library');
+      proceed(await toUploadDataUri(result.assets[0]), source === 'library');
     } catch (error) {
       const message = error instanceof Error ? error.message : '다시 시도해 주세요.';
       if (source === 'library') toast(message);
