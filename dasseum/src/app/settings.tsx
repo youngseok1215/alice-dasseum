@@ -56,7 +56,19 @@ export default function Settings() {
             <T style={[tx(14, 20, 600, C.neutral), { marginTop: 8 }]}>제품 등록 인식 결과</T>
             <Chips value={devRegisterFail} onChange={setDevRegisterFail} items={[['', '모두 성공'], ['product', '제품 사진 실패'], ['expiry', '유통기한 실패']]} />
           </View>
-          <Row label="처음 상태로 되돌리기" sub="튜토리얼부터 다시 시작해요" onPress={() => { reset(); if (router.canDismiss()) router.dismissAll(); router.replace('/'); }} />
+          <Row
+            label="모든 데이터 초기화"
+            sub="내 물품과 다씀 기록을 모두 삭제해요"
+            onPress={() => {
+              void reset()
+                .then(() => {
+                  if (router.canDismiss()) router.dismissAll();
+                  router.replace('/');
+                  toast('모든 데이터를 초기화했어요');
+                })
+                .catch((error) => toast(error instanceof Error ? error.message : '초기화하지 못했어요'));
+            }}
+          />
         </Group>}
       </Scroll>
     </Screen>
