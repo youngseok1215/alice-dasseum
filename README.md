@@ -29,6 +29,17 @@ node .\backend\server.mjs
 
 정상적으로 설정되면 길이가 0보다 큰 숫자로 표시됩니다. Expo 터미널에는 Gemini 키를 입력하지 않습니다. Expo 앱은 `EXPO_PUBLIC_API_URL`을 통해 백엔드의 `POST /api/purchase-analysis`만 호출합니다.
 
+## 직접 등록·카카오 추천 사진
+
+제품 등록을 시작하면 사진 촬영과 직접 입력 중 하나를 선택할 수 있습니다. 직접 입력에서는 사진이 필수가 아니며, 제품명과 선택 입력한 브랜드로 카카오 이미지 검색 API를 호출해 후보 사진을 최대 3개 추천합니다. REST API 키는 프런트엔드가 아니라 백엔드 환경 변수에만 설정합니다.
+
+```powershell
+$env:KAKAO_REST_API_KEY = Read-Host "카카오 REST API 키 입력"
+$env:KAKAO_REST_API_KEY.Length
+```
+
+키가 없거나 검색에 실패해도 사용자는 사진 없이 등록하거나 직접 촬영·앨범 사진을 선택할 수 있습니다.
+
 ## 반영 버전: dasseum_app_1113_v1.zip
 
 전달받은 `dasseum_app_1113_v1.zip`의 최신 프런트엔드 코드와 패키지 파일을 `dasseum/`에 반영했습니다. 기존 `dassem/`, `backend/`, 유저플로우 차트 및 Git 연습 문서는 유지합니다. README는 실제 반영 내용과 현재 제한을 설명하도록 별도로 보완했습니다.
@@ -44,7 +55,7 @@ node .\backend\server.mjs
 - 본문 기본 글자색을 `#171719`로 정리
 - 검증 과정에서 토스트의 shared value 갱신을 `.set()`으로 변경하고, 타이머 콜백 ref 갱신을 effect로 옮겨 React 린트 규칙에 맞게 보완
 
-목업 제품은 디자인 확인을 위해 남아 있으며, 새로 등록한 제품은 백엔드 SQLite에서 불러옵니다.
+목업 제품과 고정 기록은 제거했으며, 사용자가 직접 등록한 제품만 백엔드 SQLite에서 불러옵니다.
 
 ZIP 문서에 언급된 `다씀 프로토타입.html`, `export/dasseum-prototype-v5.html`, `proto/screens.jsx`, `dasseum-gpt-spec.html`은 디자인·개발 기준 문서 이름이며, ZIP 안에는 포함되어 있지 않습니다.
 
