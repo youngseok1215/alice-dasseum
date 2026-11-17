@@ -67,6 +67,14 @@ function DetailScreen() {
       Alert.alert('제품을 삭제하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
     }
   };
+  const onOpenToday = async () => {
+    try {
+      await openToday(p.id);
+      toast('개봉일을 기록했어요');
+    } catch (error) {
+      Alert.alert('개봉일을 저장하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    }
+  };
   const onEdit = () => { setMenu(false); router.push({ pathname: '/recognized', params: { edit: p.id } }); };
 
   return (
@@ -106,7 +114,7 @@ function DetailScreen() {
           {row('개봉일', p.opened ? <T style={v}>{p.opened}</T> : (
             <>
               <T style={[v, { flex: 1 }]}>미개봉</T>
-              <TextBtn color={C.ink} onPress={() => { openToday(p.id); toast('개봉일을 기록했어요'); }}>오늘 개봉했어요</TextBtn>
+              <TextBtn color={C.ink} onPress={onOpenToday}>오늘 개봉했어요</TextBtn>
             </>
           ))}
           {row('등록일', <T style={v}>{p.registered}</T>)}

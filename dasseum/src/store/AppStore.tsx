@@ -49,7 +49,7 @@ interface Store extends State {
   hold: (p: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => Promise<void>;
   markDone: (id: string) => Promise<void>;
   undoDone: (id: string) => Promise<void>;
-  openToday: (id: string) => void;
+  openToday: (id: string) => Promise<void>;
   product: (id: string) => Product;
   /** 삭제됐거나 아직 불러오지 못한 제품인지 확인 — 화면에서 product() 전에 먼저 확인 */
   hasProduct: (id: string | undefined) => boolean;
@@ -184,10 +184,19 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setRemoteProducts((current) => current.map((item) => item.id === id ? result.product : item));
     setRemoteRecords(result.records);
   }, []);
-  const openToday = useCallback((id: string) => setS((x) => ({
-    ...x,
-    openedOverrides: { ...x.openedOverrides, [id]: TODAY },
-  })), []);
+  // '오늘 개봉했어요': 서버 제품이면 SQLite에 저장하고, 실패하면 예외를 던져 화면에서 안내합니다.
+  const openToday = useCallback(async (id: string) => {
+    if (remoteProducts.some((item) => item.id === id)) {
+      const saved = await updateRemoteProduct(id, { openedAt: TODAY.replace(/\./g, '-') });
+      setRemoteProducts((items) => items.map((item) => item.id === saved.id ? saved : item));
+      setS((x) => {
+        const { [id]: _drop, ...openedOverrides } = x.openedOverrides;
+        return { ...x, openedOverrides };
+      });
+      return;
+    }
+    setS((x) => ({ ...x, openedOverrides: { ...x.openedOverrides, [id]: TODAY } }));
+  }, [remoteProducts]);
 
   const registerProduct = useCallback(async (form: ProductForm) => {
     const saved = await createRemoteProduct({
@@ -207,15 +216,20 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const updateProduct = useCallback(async (id: string, form: ProductForm) => {
     const isRemote = remoteProducts.some((item) => item.id === id);
     if (isRemote) {
+      // 비운 날짜·메모는 null로 보내야 서버에서도 지워집니다 (undefined는 JSON에서 빠져 기존 값이 유지됨).
       const saved = await updateRemoteProduct(id, {
         name: form.name.trim(),
-        brand: form.brand || product(id).brand || undefined,
+        brand: form.brand?.trim() || null,
         category: form.cat,
-        openedAt: apiDate(form.opened),
-        expiresAt: apiDate(form.expires),
-        imageUri: form.imageUri ?? product(id).imageUri,
+        openedAt: apiDate(form.opened) ?? null,
+        expiresAt: apiDate(form.expires) ?? null,
+        ...(form.imageUri !== undefined ? { imageUri: form.imageUri } : {}),
         quantity: form.quantity ?? product(id).quantity ?? 1,
-        memo: form.memo ?? product(id).memo ?? '',
+        memo: form.memo?.trim() || null,
+      });
+      setS((x) => {
+        const { [id]: _drop, ...openedOverrides } = x.openedOverrides;
+        return { ...x, openedOverrides };
       });
       setRemoteProducts((current) => current.map((item) => item.id === saved.id ? saved : item));
       return;
@@ -247,19 +261,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 999) {
       throw new Error('수량은 1개부터 999개까지 입력해 주세요.');
     }
-    const current = product(id);
-    const saved = await updateRemoteProduct(id, {
-      name: current.name,
-      brand: current.brand || undefined,
-      category: current.cat,
-      quantity,
-      openedAt: apiDate(current.opened),
-      expiresAt: apiDate(current.expires),
-      imageUri: current.imageUri,
-      memo: current.memo ?? '',
-    });
+    // 수량만 보냅니다. 다른 필드를 함께 보내면 화면에만 있던 값(예: 로컬 개봉일)이 덮어쓸 수 있어요.
+    const saved = await updateRemoteProduct(id, { quantity });
     setRemoteProducts((items) => items.map((item) => item.id === saved.id ? saved : item));
-  }, [product]);
+  }, []);
 
   const deleteProduct = useCallback(async (id: string) => {
     const isRemote = remoteProducts.some((item) => item.id === id);

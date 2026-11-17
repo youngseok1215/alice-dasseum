@@ -121,7 +121,7 @@ function publicRecord({ category, match, query, productId, ...record }) {
 }
 
 function optionalDate(value, field) {
-  if (value === undefined || value === '') return undefined;
+  if (value === undefined || value === null || value === '') return undefined;
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const date = new Date(`${value}T00:00:00Z`);
     if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value) return value;
@@ -418,15 +418,18 @@ const server = createServer(async (request, response) => {
       if (!existing) return send(response, 404, { error: 'Product not found' });
       let changed;
       try {
+        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('Expected a JSON object');
+        // 보낸 필드만 바꿉니다. 선택 필드는 null 또는 ''을 보내면 비웁니다 (개봉일·유통기한·메모 지우기).
+        const pick = (key) => (Object.hasOwn(body, key) ? body[key] : existing[key] ?? undefined);
         changed = parseProduct({
-          name: body?.name ?? existing.name,
-          brand: body?.brand ?? existing.brand,
-          category: body?.category ?? existing.category,
-          quantity: body?.quantity ?? existing.quantity,
-          openedAt: body?.openedAt ?? existing.openedAt ?? undefined,
-          expiresAt: body?.expiresAt ?? existing.expiresAt ?? undefined,
-          imageUri: body?.imageUri ?? existing.imageUri,
-          memo: body?.memo ?? existing.memo ?? undefined,
+          name: pick('name'),
+          brand: pick('brand'),
+          category: pick('category'),
+          quantity: pick('quantity'),
+          openedAt: pick('openedAt'),
+          expiresAt: pick('expiresAt'),
+          imageUri: pick('imageUri'),
+          memo: pick('memo'),
         });
       } catch (error) {
         return send(response, 400, { error: error.message });

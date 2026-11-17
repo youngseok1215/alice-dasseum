@@ -70,6 +70,13 @@ function dotted(value?: string) {
   return value ? value.replace(/-/g, '.') : null;
 }
 
+/** 화면용 절대 주소(`http://서버/api/images/x.jpg`)를 서버 저장용 상대 경로(`/api/images/x.jpg`)로 되돌립니다. */
+function toStoredImageUri<T extends string | null | undefined>(uri: T): T {
+  if (!uri) return uri;
+  const local = /^https?:\/\/[^/]+(\/api\/images\/[0-9a-f-]+\.(?:jpg|jpeg|png|webp))$/i.exec(uri);
+  return (local ? local[1] : uri) as T;
+}
+
 function toProduct(product: StoredProduct): Product {
   const baseUrl = apiBaseUrl();
   return {
@@ -176,7 +183,7 @@ export async function createProduct(input: CreateProductInput) {
   const response = await fetch(`${apiBaseUrl()}/api/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, imageUri: toStoredImageUri(input.imageUri) }),
   }).catch(() => {
     throw new Error('제품 저장 서버에 연결할 수 없어요.');
   });
@@ -194,11 +201,23 @@ export async function listProducts() {
   return payload.products.map(toProduct);
 }
 
-export async function updateProduct(id: string, input: CreateProductInput) {
+/** 수정 요청: 선택 필드에 null을 보내면 서버에서 그 값을 비웁니다. 보내지 않은 필드는 유지됩니다. */
+export type UpdateProductInput = Partial<{
+  name: string;
+  brand: string | null;
+  category: Category;
+  quantity: number;
+  openedAt: string | null;
+  expiresAt: string | null;
+  imageUri: string | null;
+  memo: string | null;
+}>;
+
+export async function updateProduct(id: string, input: UpdateProductInput) {
   const response = await fetch(`${apiBaseUrl()}/api/products/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    body: JSON.stringify('imageUri' in input ? { ...input, imageUri: toStoredImageUri(input.imageUri) } : input),
   }).catch(() => {
     throw new Error('제품 수정 서버에 연결할 수 없어요.');
   });
