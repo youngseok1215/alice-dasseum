@@ -1,7 +1,7 @@
 // 5. AI 확인 결과 — 동일 / 유사 / 없음
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { getPendingPurchaseAnalysis } from '@/api/products';
 import { AiHead } from '@/components/ai';
 import { BottomSheet } from '@/components/overlay';
@@ -37,10 +37,14 @@ export default function Result() {
   }[r.verdict];
   const isSupp = r.items.some((k) => ['영양제', '의약품'].includes(product(k).cat));
 
-  const onHold = () => {
-    hold({ mode, query: q, verdict: r.verdict, productId: r.items[0] });
-    router.push({ pathname: '/held', params: { item: r.items[0] } });
-    toast('구매를 미뤘어요. 있는 것부터 써요');
+  const onHold = async () => {
+    try {
+      await hold({ mode, query: q, verdict: r.verdict, productId: r.items[0] });
+      router.push({ pathname: '/held', params: { item: r.items[0] } });
+      toast('구매를 미뤘어요. 있는 것부터 써요');
+    } catch (error) {
+      Alert.alert('구매 보류를 기록하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    }
   };
   const onContinue = () => { setAsk(false); setQuery(''); nav.reset('/check'); };
   // '등록하기': 구매 전 확인을 처음 상태로 돌리고 제품 등록 촬영으로
