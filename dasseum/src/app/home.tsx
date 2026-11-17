@@ -4,17 +4,17 @@ import { ScrollView, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Screen, Scroll } from '@/components/shell';
 import { Card, DBadge, ddayBadge, Icon, IconBtn, Line, Mascot, Press, ProdImg, SectionHead, T } from '@/components/ui';
-import { byDday, FIRST_IDS, reasonOf } from '@/data/products';
+import { byDday, reasonOf } from '@/data/products';
 import { useOpenCamera } from '@/hooks/use-open-camera';
 import { useApp } from '@/store/AppStore';
 import { BRAND_FONT, C, tx } from '@/theme/tokens';
 
 export default function Home() {
   const openCamera = useOpenCamera();
-  const { holdList, dones, product, products, completed, notifyEnabled, alertsSeen, markAlertsSeen } = useApp();
-  // 프로토타입 firstList: 이유(reasonOf)가 있는 제품만, 사용기한 임박순
-  const firsts = FIRST_IDS.filter((id) => !completed.includes(id)).map(product).filter((p) => reasonOf(p)).sort(byDday);
-  const urgent = products().filter((p) => !completed.includes(p.id) && p.dday !== null && p.dday <= 7).sort((a, b) => (a.dday ?? 9999) - (b.dday ?? 9999));
+  const { holdList, dones, products, completed, notifyEnabled, alertsSeen, markAlertsSeen } = useApp();
+  const activeProducts = products().filter((p) => !completed.includes(p.id));
+  const firsts = activeProducts.filter((p) => reasonOf(p)).sort(byDday);
+  const urgent = activeProducts.filter((p) => p.dday !== null && p.dday <= 7).sort((a, b) => (a.dday ?? 9999) - (b.dday ?? 9999));
   const openDetail = (id: string) => router.push({ pathname: '/product/[id]', params: { id } });
 
   return (
