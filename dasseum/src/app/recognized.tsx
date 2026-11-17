@@ -45,11 +45,13 @@ export default function Recognized() {
   const expiryRead = expShot !== '0';
   const dt = (value: string | null) => (value ? value.replace(/\./g, '-') : '');
   const [form, setForm] = useState(existing
-    ? { name: existing.name, brand: existing.brand, cat: existing.cat as string, opened: dt(existing.opened), expires: dt(existing.expires) }
+    ? { name: existing.name, brand: existing.brand, cat: existing.cat as string, quantity: String(existing.quantity ?? 1), memo: existing.memo ?? '', opened: dt(existing.opened), expires: dt(existing.expires) }
     : {
       name: isManual ? '' : suggestion?.name || '',
       brand: isManual ? '' : suggestion?.brand || '',
       cat: isManual ? '' : suggestion?.category || '',
+      quantity: '1',
+      memo: '',
       opened: '',
       expires: !isManual && expiryRead ? suggestion?.expiresAt || '' : '',
     });
@@ -67,7 +69,8 @@ export default function Recognized() {
   const userPickedImage = useRef(false);
 
   const set = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
-  const ok = Boolean(form.name.trim() && form.cat) && !saving;
+  const quantity = Number(form.quantity);
+  const ok = Boolean(form.name.trim() && form.cat && Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= 999) && !saving;
   const previewUri = imageChoice?.kind === 'captured'
     ? imageChoice.dataUri
     : imageChoice?.kind === 'remote'
@@ -162,6 +165,8 @@ export default function Recognized() {
           expires: form.expires,
           brand: form.brand.trim() || existing.brand,
           imageUri,
+          quantity,
+          memo: form.memo.trim(),
         });
         nav.back();
         toast('제품 정보를 수정했어요');
@@ -175,6 +180,8 @@ export default function Recognized() {
         manual: isManual,
         brand: form.brand.trim() || undefined,
         imageUri,
+        quantity,
+        memo: form.memo.trim(),
       });
       clearPendingRegistration();
       router.replace('/registered');
@@ -236,6 +243,32 @@ export default function Recognized() {
                   </Pressable>
                 );
               })}
+            </View>
+          </View>
+          <View>
+            <Label hint="1개부터 999개까지">수량</Label>
+            <View style={{ height: 48, flexDirection: 'row', alignItems: 'center', borderRadius: 12, backgroundColor: C.white }}>
+              <Hair radius={12} color={C.lineNeutral} />
+              <Pressable onPress={() => set('quantity', String(Math.max(1, quantity - 1)))} accessibilityLabel="수량 줄이기"
+                style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+                <T style={tx(22, 28, 500, C.neutral)}>−</T>
+              </Pressable>
+              <TextInput value={form.quantity} onChangeText={(value) => set('quantity', value.replace(/\D/g, '').slice(0, 3))}
+                keyboardType="number-pad" maxLength={3} textAlign="center" accessibilityLabel="제품 수량"
+                style={{ flex: 1, height: 48, paddingVertical: 0, fontSize: 16, fontFamily: FONT[600], color: C.ink }} />
+              <Pressable onPress={() => set('quantity', String(Math.min(999, (Number.isFinite(quantity) ? quantity : 0) + 1)))} accessibilityLabel="수량 늘리기"
+                style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+                <T style={tx(22, 28, 500, C.neutral)}>＋</T>
+              </Pressable>
+            </View>
+          </View>
+          <View>
+            <Label hint="선택 사항 · 최대 500자">메모</Label>
+            <View style={{ minHeight: 96, borderRadius: 12, backgroundColor: C.white }}>
+              <Hair radius={12} color={C.lineNeutral} />
+              <TextInput value={form.memo} onChangeText={(value) => set('memo', value)} multiline maxLength={500}
+                textAlignVertical="top" placeholder="보관 장소나 사용 방법 등을 적어 주세요" placeholderTextColor={C.alt}
+                style={{ minHeight: 96, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, lineHeight: 22, fontFamily: FONT[500], color: C.ink }} />
             </View>
           </View>
           <View>
