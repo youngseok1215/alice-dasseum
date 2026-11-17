@@ -303,6 +303,9 @@ export async function analyzePurchase(query, purpose, products, { embeddingStore
       verdict = 'similar';
       selected = ranked.filter((item) => item.similarity >= Math.max(similarityThreshold, top.similarity - 0.05)).slice(0, 3);
     }
+    // 기준값(0.8) 조정용: 상위 후보 점수와 최종 판정을 로그로 남깁니다 (실제 키로 테스트할 때 확인)
+    console.log(`[purchase analysis] ‘${trimmed}’ → ${verdict} (${exact ? '이름 일치' : rule ? '규격 규칙' : '임베딩'}) | 상위: ${
+      ranked.slice(0, 3).map((item) => `${productText(item.product)} ${item.similarity.toFixed(3)}`).join(', ') || '후보 없음'}`);
     const matched = selected[0]?.product;
     const differences = matched
       ? (specDifferences(trimmed, productText(matched)).length
