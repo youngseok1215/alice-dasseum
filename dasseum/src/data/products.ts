@@ -24,7 +24,10 @@ function dotDate(date: Date) {
   return `${year}.${month}.${day}`;
 }
 
+/** 앱을 켠 시점의 날짜 (표시용). 저장하는 날짜는 자정을 넘겨도 맞도록 todayDot()을 쓰세요. */
 export const TODAY = dotDate(new Date());
+/** 지금 기준 오늘 날짜 'YYYY.MM.DD' */
+export const todayDot = () => dotDate(new Date());
 export const TODAY_SHORT = TODAY.slice(5);
 
 export function isCurrentMonth(value: string) {

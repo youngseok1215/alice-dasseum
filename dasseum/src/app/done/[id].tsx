@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, View } from 'react-native';
 import { nav, Screen, useToast } from '@/components/shell';
 import { ActionArea, Card, DBadge, DButton, Mascot, Press, ProdImg, T } from '@/components/ui';
-import { TODAY } from '@/data/products';
+import { todayDot } from '@/data/products';
 import { MissingProduct } from '@/components/missing-product';
 import { useBusy } from '@/hooks/use-busy';
 import { useApp } from '@/store/AppStore';
@@ -47,7 +47,7 @@ function DoneScreen() {
         <Card style={{ width: '100%', marginTop: 28, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <ProdImg size={48} radius={10} uri={p.imageUri} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <T style={tx(13, 18, 400, C.alt)}>{p.cat} · {TODAY} 다씀</T>
+            <T style={tx(13, 18, 400, C.alt)}>{p.cat} · {todayDot()} 다씀</T>
             <T numberOfLines={1} style={tx(15, 22, 500)}>{p.name}</T>
           </View>
           <DBadge tone="mint">다씀</DBadge>

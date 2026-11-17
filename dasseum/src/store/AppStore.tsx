@@ -14,7 +14,7 @@ import {
 } from '@/api/products';
 import {
   SEED,
-  TODAY,
+  todayDot,
   TODAY_SHORT,
   ddayOf,
   reasonOf,
@@ -207,7 +207,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   // '오늘 개봉했어요': 서버 제품이면 SQLite에 저장하고, 실패하면 예외를 던져 화면에서 안내합니다.
   const openToday = useCallback(async (id: string) => {
     if (remoteProducts.some((item) => item.id === id)) {
-      const saved = await updateRemoteProduct(id, { openedAt: TODAY.replace(/\./g, '-') });
+      const saved = await updateRemoteProduct(id, { openedAt: todayDot().replace(/\./g, '-') });
       setRemoteProducts((items) => items.map((item) => item.id === saved.id ? saved : item));
       setS((x) => {
         const { [id]: _drop, ...openedOverrides } = x.openedOverrides;
@@ -215,7 +215,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       });
       return;
     }
-    setS((x) => ({ ...x, openedOverrides: { ...x.openedOverrides, [id]: TODAY } }));
+    setS((x) => ({ ...x, openedOverrides: { ...x.openedOverrides, [id]: todayDot() } }));
   }, [remoteProducts]);
 
   const registerProduct = useCallback(async (form: ProductForm) => {
