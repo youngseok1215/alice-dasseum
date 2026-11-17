@@ -1,3 +1,4 @@
+import { apiBaseUrl, apiRequest, failIf } from '@/api/client';
 import { calculateDday, type Category, type Product } from '@/data/products';
 
 export type ProductSuggestion = {
@@ -60,11 +61,6 @@ let pendingExpiryPhoto: string | undefined;
 let pendingSuggestion: ProductSuggestion | undefined;
 let pendingPurchaseAnalysis: PurchaseAnalysis | undefined;
 
-function apiBaseUrl() {
-  const value = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
-  if (!value) throw new Error('EXPO_PUBLIC_API_URL에 백엔드 주소를 설정해 주세요.');
-  return value;
-}
 
 function dotted(value?: string) {
   return value ? value.replace(/-/g, '.') : null;
@@ -88,7 +84,11 @@ function toProduct(product: StoredProduct): Product {
     expires: dotted(product.expiresAt),
     dday: calculateDday(product.expiresAt),
     registered: dotted(product.createdAt.slice(0, 10)) || '',
-    imageUri: product.imageUri?.startsWith('/') ? `${baseUrl}${product.imageUri}` : product.imageUri,
+    // 예전에 `http://192.168.x.x:3001/api/images/...`처럼 절대 주소로 저장된 사진도 현재 서버 주소로 보여줍니다.
+    imageUri: (() => {
+      const stored = toStoredImageUri(product.imageUri);
+      return stored?.startsWith('/') ? `${baseUrl}${stored}` : stored;
+    })(),
     quantity: product.quantity,
     memo: product.memo,
     status: product.status,
@@ -133,72 +133,44 @@ export function getPendingPurchaseAnalysis() {
 
 export async function analyzePurchase(query: string, purpose?: string, signal?: AbortSignal) {
   pendingPurchaseAnalysis = undefined;
-  const response = await fetch(`${apiBaseUrl()}/api/purchase-analysis`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, purpose }),
-    signal,
-  }).catch(() => {
-    throw new Error('AI 분석 서버에 연결할 수 없어요. 서버 주소와 Wi-Fi를 확인해 주세요.');
+  // 백엔드: 임베딩(10초×2) + 판단 문구(12초×2)까지 고려한 여유 시간
+  const result = await apiRequest<Partial<PurchaseAnalysis>>('/api/purchase-analysis', {
+    method: 'POST', body: { query, purpose }, signal, timeoutMs: 75_000, failMessage: 'AI 분석을 하지 못했어요.',
   });
-  const payload = await response.json().catch(() => ({})) as Partial<PurchaseAnalysis> & { error?: string };
-  if (response.status === 503) throw new Error(payload.error || '백엔드에 Gemini API 키를 설정해 주세요.');
-  if (!response.ok || !payload.verdict) throw new Error(payload.error || '유사 제품을 분석하지 못했어요.');
-  pendingPurchaseAnalysis = payload as PurchaseAnalysis;
+  failIf(result, result.ok && Boolean(result.payload.verdict), '유사 제품을 분석하지 못했어요.');
+  pendingPurchaseAnalysis = result.payload as PurchaseAnalysis;
   return pendingPurchaseAnalysis;
 }
 
 export async function recognizePhoto(image: string, signal?: AbortSignal) {
-  const response = await fetch(`${apiBaseUrl()}/api/products/recognize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image }),
-    signal,
-  }).catch(() => {
-    throw new Error('AI 서버에 연결할 수 없어요. 서버 주소와 Wi-Fi를 확인해 주세요.');
+  const result = await apiRequest<{ suggestion?: ProductSuggestion }>('/api/products/recognize', {
+    method: 'POST', body: { image }, signal, timeoutMs: 55_000, failMessage: '사진을 인식하지 못했어요.',
   });
-
-  const payload: { suggestion?: ProductSuggestion; error?: string } = await response.json().catch(() => ({}));
-  if (response.status === 503) throw new Error('서버에 AI 인식 키가 설정되지 않았어요.');
-  if (response.status === 413) throw new Error('사진이 너무 커요. 더 작은 사진으로 다시 시도해 주세요.');
-  if (response.status === 429) throw new Error('AI 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.');
-  if (!response.ok || !payload.suggestion) throw new Error(payload.error || '사진을 인식하지 못했어요.');
-  return payload.suggestion;
+  if (result.status === 413) failIf(result, false, '사진이 너무 커요. 더 작은 사진으로 다시 시도해 주세요.');
+  failIf(result, result.ok && Boolean(result.payload.suggestion), '사진을 인식하지 못했어요.');
+  return result.payload.suggestion as ProductSuggestion;
 }
 
 export async function saveProductImage(image: string) {
-  const response = await fetch(`${apiBaseUrl()}/api/products/images`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image }),
-  }).catch(() => {
-    throw new Error('사진 저장 서버에 연결할 수 없어요.');
+  const result = await apiRequest<{ imageUri?: string }>('/api/products/images', {
+    method: 'POST', body: { image }, timeoutMs: 30_000, failMessage: '사진을 저장하지 못했어요.',
   });
-  const payload: { imageUri?: string; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.imageUri) throw new Error(payload.error || '사진을 저장하지 못했어요.');
-  return payload.imageUri;
+  failIf(result, result.ok && Boolean(result.payload.imageUri), '사진을 저장하지 못했어요.');
+  return result.payload.imageUri as string;
 }
 
 export async function createProduct(input: CreateProductInput) {
-  const response = await fetch(`${apiBaseUrl()}/api/products`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...input, imageUri: toStoredImageUri(input.imageUri) }),
-  }).catch(() => {
-    throw new Error('제품 저장 서버에 연결할 수 없어요.');
+  const result = await apiRequest<{ product?: StoredProduct }>('/api/products', {
+    method: 'POST', body: { ...input, imageUri: toStoredImageUri(input.imageUri) }, failMessage: '제품을 저장하지 못했어요.',
   });
-  const payload: { product?: StoredProduct; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.product) throw new Error(payload.error || '제품을 저장하지 못했어요.');
-  return toProduct(payload.product);
+  failIf(result, result.ok && Boolean(result.payload.product), '제품을 저장하지 못했어요.');
+  return toProduct(result.payload.product as StoredProduct);
 }
 
 export async function listProducts() {
-  const response = await fetch(`${apiBaseUrl()}/api/products`).catch(() => {
-    throw new Error('제품 목록 서버에 연결할 수 없어요.');
-  });
-  const payload: { products?: StoredProduct[]; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.products) throw new Error(payload.error || '제품 목록을 불러오지 못했어요.');
-  return payload.products.map(toProduct);
+  const result = await apiRequest<{ products?: StoredProduct[] }>('/api/products', { failMessage: '제품 목록을 불러오지 못했어요.' });
+  failIf(result, result.ok && Array.isArray(result.payload.products), '제품 목록을 불러오지 못했어요.');
+  return (result.payload.products as StoredProduct[]).map(toProduct);
 }
 
 /** 수정 요청: 선택 필드에 null을 보내면 서버에서 그 값을 비웁니다. 보내지 않은 필드는 유지됩니다. */
@@ -214,70 +186,49 @@ export type UpdateProductInput = Partial<{
 }>;
 
 export async function updateProduct(id: string, input: UpdateProductInput) {
-  const response = await fetch(`${apiBaseUrl()}/api/products/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify('imageUri' in input ? { ...input, imageUri: toStoredImageUri(input.imageUri) } : input),
-  }).catch(() => {
-    throw new Error('제품 수정 서버에 연결할 수 없어요.');
+  const body = 'imageUri' in input ? { ...input, imageUri: toStoredImageUri(input.imageUri) } : input;
+  const result = await apiRequest<{ product?: StoredProduct }>(`/api/products/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body, failMessage: '제품을 수정하지 못했어요.',
   });
-  const payload: { product?: StoredProduct; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.product) throw new Error(payload.error || '제품을 수정하지 못했어요.');
-  return toProduct(payload.product);
+  failIf(result, result.ok && Boolean(result.payload.product), '제품을 수정하지 못했어요.');
+  return toProduct(result.payload.product as StoredProduct);
 }
 
 export async function deleteProduct(id: string) {
-  const response = await fetch(`${apiBaseUrl()}/api/products/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  }).catch(() => {
-    throw new Error('제품 삭제 서버에 연결할 수 없어요.');
+  const result = await apiRequest<{ deleted?: boolean }>(`/api/products/${encodeURIComponent(id)}`, {
+    method: 'DELETE', failMessage: '제품을 삭제하지 못했어요.',
   });
-  const payload: { deleted?: boolean; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.deleted) throw new Error(payload.error || '제품을 삭제하지 못했어요.');
+  failIf(result, result.ok && Boolean(result.payload.deleted), '제품을 삭제하지 못했어요.');
 }
 
 export async function listRecords() {
-  const response = await fetch(`${apiBaseUrl()}/api/records`).catch(() => {
-    throw new Error('활동 기록 서버에 연결할 수 없어요.');
-  });
-  const payload: { records?: ActivityRecord[]; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.records) throw new Error(payload.error || '활동 기록을 불러오지 못했어요.');
-  return payload.records;
+  const result = await apiRequest<{ records?: ActivityRecord[] }>('/api/records', { failMessage: '활동 기록을 불러오지 못했어요.' });
+  failIf(result, result.ok && Array.isArray(result.payload.records), '활동 기록을 불러오지 못했어요.');
+  return result.payload.records as ActivityRecord[];
 }
 
+type DoneResponse = { product?: StoredProduct; records?: ActivityRecord[] };
+
 export async function markProductDone(id: string) {
-  const response = await fetch(`${apiBaseUrl()}/api/products/${encodeURIComponent(id)}/done`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  }).catch(() => {
-    throw new Error('다씀 기록 서버에 연결할 수 없어요.');
+  const result = await apiRequest<DoneResponse>(`/api/products/${encodeURIComponent(id)}/done`, {
+    method: 'POST', body: {}, failMessage: '다씀으로 기록하지 못했어요.',
   });
-  const payload: { product?: StoredProduct; records?: ActivityRecord[]; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.product || !payload.records) throw new Error(payload.error || '다씀으로 기록하지 못했어요.');
-  return { product: toProduct(payload.product), records: payload.records };
+  failIf(result, result.ok && Boolean(result.payload.product && result.payload.records), '다씀으로 기록하지 못했어요.');
+  return { product: toProduct(result.payload.product as StoredProduct), records: result.payload.records as ActivityRecord[] };
 }
 
 export async function undoProductDone(id: string) {
-  const response = await fetch(`${apiBaseUrl()}/api/products/${encodeURIComponent(id)}/done`, {
-    method: 'DELETE',
-  }).catch(() => {
-    throw new Error('다씀 기록 서버에 연결할 수 없어요.');
+  const result = await apiRequest<DoneResponse>(`/api/products/${encodeURIComponent(id)}/done`, {
+    method: 'DELETE', failMessage: '다씀 기록을 되돌리지 못했어요.',
   });
-  const payload: { product?: StoredProduct; records?: ActivityRecord[]; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.product || !payload.records) throw new Error(payload.error || '다씀 기록을 되돌리지 못했어요.');
-  return { product: toProduct(payload.product), records: payload.records };
+  failIf(result, result.ok && Boolean(result.payload.product && result.payload.records), '다씀 기록을 되돌리지 못했어요.');
+  return { product: toProduct(result.payload.product as StoredProduct), records: result.payload.records as ActivityRecord[] };
 }
 
 export async function createHold(input: { productId: string; query: string; verdict: 'same' | 'similar' }) {
-  const response = await fetch(`${apiBaseUrl()}/api/holds`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  }).catch(() => {
-    throw new Error('구매 보류 기록 서버에 연결할 수 없어요.');
+  const result = await apiRequest<{ records?: ActivityRecord[] }>('/api/holds', {
+    method: 'POST', body: input, failMessage: '구매 보류를 기록하지 못했어요.',
   });
-  const payload: { records?: ActivityRecord[]; error?: string } = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.records) throw new Error(payload.error || '구매 보류를 기록하지 못했어요.');
-  return payload.records;
+  failIf(result, result.ok && Array.isArray(result.payload.records), '구매 보류를 기록하지 못했어요.');
+  return result.payload.records as ActivityRecord[];
 }
