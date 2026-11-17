@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Pressable, TextInput, View, type TextInputInstance } from 'react-native';
 import { Screen, Scroll } from '@/components/shell';
-import { DButton, Hair, Icon, IconBtn, Line, Press, T } from '@/components/ui';
+import { DButton, Hair, Icon, IconBtn, Line, Press, ProdImg, T } from '@/components/ui';
 import { useOpenCamera } from '@/hooks/use-open-camera';
 import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
@@ -14,11 +14,28 @@ function startSearch(q: string, setQuery: (q: string) => void, addRecent: (q: st
   router.push({ pathname: '/analyzing', params: { mode: 'search', q } });
 }
 
+function searchable(value: string) {
+  return value.normalize('NFKC').toLowerCase().replace(/\s/g, '');
+}
+
 export default function Check() {
   const openCamera = useOpenCamera();
-  const { query, setQuery, recents, addRecent, removeRecent } = useApp();
+  const { query, setQuery, recents, addRecent, removeRecent, products, completed } = useApp();
   const ref = useRef<TextInputInstance>(null);
   const [focus, setFocus] = useState(false);
+  const keyword = searchable(query.trim());
+  const suggestions = keyword
+    ? products()
+        .filter((product) => !completed.includes(product.id))
+        .map((product) => ({
+          product,
+          position: searchable(`${product.brand} ${product.name}`).indexOf(keyword),
+        }))
+        .filter(({ position }) => position >= 0)
+        .sort((left, right) => left.position - right.position || left.product.name.localeCompare(right.product.name, 'ko'))
+        .slice(0, 5)
+        .map(({ product }) => product)
+    : [];
   const submit = (q?: string) => {
     const v = (q ?? query).trim();
     if (!v) return;
@@ -57,6 +74,31 @@ export default function Check() {
               </Pressable>
             ) : null}
           </Pressable>
+          {suggestions.length > 0 && (
+            <View style={{ borderRadius: 12, backgroundColor: C.white, overflow: 'hidden' }}>
+              <Hair radius={12} color={C.lineNeutral} />
+              <T style={[tx(13, 18, 600, C.alt), { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4 }]}>내 물품 연관 검색어</T>
+              {suggestions.map((product, index) => (
+                <View key={product.id}>
+                  {index > 0 && <Line at="top" />}
+                  <Press
+                    accessibilityLabel={`${product.name} 검색`}
+                    onPress={() => submit(product.name)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 9 }}
+                  >
+                    <ProdImg size={40} radius={8} uri={product.imageUri} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <T numberOfLines={1} style={tx(15, 22, 600)}>{product.name}</T>
+                      <T numberOfLines={1} style={[tx(12, 17, 400, C.alt), { marginTop: 1 }]}>
+                        {[product.brand, product.cat].filter(Boolean).join(' · ')}
+                      </T>
+                    </View>
+                    <Icon name="chevronRight" size={18} color={C.alt} />
+                  </Press>
+                </View>
+              ))}
+            </View>
+          )}
           <DButton label="확인하기" disabled={!query.trim()} onPress={() => submit()} />
           <DButton label="사진으로 확인하기" variant="outlined" icon="camera" onPress={() => openCamera()} />
         </View>
