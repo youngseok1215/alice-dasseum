@@ -16,7 +16,9 @@ function vectorOf(text) {
 }
 
 export async function startFakeGemini() {
-  const state = { embedCalls: 0, embedTexts: [], adviceCalls: 0, lastPrompt: '' };
+  // vision: 사진 인식 응답으로 돌려줄 값, failAdvice: 판단 문구 요청을 500으로 실패시킴 (규칙 기반 대체 확인용)
+  // rejectSchema: responseJsonSchema가 있으면 400 (스키마 미지원 모델 흉내)
+  const state = { embedCalls: 0, embedTexts: [], adviceCalls: 0, visionCalls: 0, lastPrompt: '', lastConfig: undefined, vision: undefined, failAdvice: false, rejectSchema: false };
   const server = createServer(async (request, response) => {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -28,9 +30,22 @@ export async function startFakeGemini() {
       state.embedTexts.push(text);
       return response.end(JSON.stringify({ embedding: { values: vectorOf(text) } }));
     }
+    if (request.url.includes(':generateContent') && state.rejectSchema && body.generationConfig?.responseJsonSchema) {
+      response.statusCode = 400;
+      return response.end(JSON.stringify({ error: { status: 'INVALID_ARGUMENT' } }));
+    }
+    if (request.url.includes(':generateContent') && body.contents?.[0]?.parts?.some((part) => part.inlineData)) {
+      state.visionCalls += 1;
+      state.lastConfig = body.generationConfig;
+      return response.end(JSON.stringify({
+        candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(state.vision ?? {}) }] } }],
+      }));
+    }
     if (request.url.includes(':generateContent')) {
       state.adviceCalls += 1;
       state.lastPrompt = text;
+      state.lastConfig = body.generationConfig;
+      if (state.failAdvice) { response.statusCode = 500; return response.end('{}'); }
       const answer = { decision: 'CHECK_FIRST', title: '테스트 판단', reason: '테스트용 판단 문구예요.' };
       return response.end(JSON.stringify({
         candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify(answer) }] } }],
@@ -43,7 +58,9 @@ export async function startFakeGemini() {
   return {
     url: `http://127.0.0.1:${server.address().port}`,
     state,
-    reset() { state.embedCalls = 0; state.embedTexts = []; state.adviceCalls = 0; state.lastPrompt = ''; },
+    reset() {
+      Object.assign(state, { embedCalls: 0, embedTexts: [], adviceCalls: 0, visionCalls: 0, lastPrompt: '', lastConfig: undefined, vision: undefined, failAdvice: false, rejectSchema: false });
+    },
     close() { server.closeAllConnections(); server.close(); },
   };
 }

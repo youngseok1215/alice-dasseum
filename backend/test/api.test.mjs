@@ -405,3 +405,67 @@ describe('구매 분석 (가짜 Gemini)', () => {
     } finally { await server.stop(); gemini.close(); }
   });
 });
+
+describe('Structured Output · 계산된 숫자 전달 (가짜 Gemini)', () => {
+  test('사진 인식은 스키마로 요청하고, 라벨 규격을 제품명에 붙여 반환', async () => {
+    const gemini = await startFakeGemini();
+    const { dbPath } = tempDb();
+    const server = await startServer(dbPath, { GEMINI_API_KEY: 'test-key', GEMINI_API_BASE_URL: gemini.url });
+    try {
+      gemini.state.vision = { name: 'VITAMIN C', brand: 'Bronson', spec: '500mg 250정', category: '영양제', expiresAt: '2027-03-31' };
+      const res = await server.api('POST', '/api/products/recognize', { image: `data:image/png;base64,${PNG}` });
+      assert.equal(res.status, 200);
+      assert.equal(res.json.suggestion.name, 'VITAMIN C 500mg 250정');
+      assert.equal(res.json.suggestion.spec, '500mg 250정');
+      assert.equal(res.json.suggestion.expiresAt, '2027-03-31');
+      const schema = gemini.state.lastConfig.responseJsonSchema;
+      assert.equal(schema.type, 'object');
+      assert.deepEqual(schema.properties.category.enum, ['화장품', '영양제', '의약품', '생활용품', '알 수 없음']);
+      assert.deepEqual(schema.properties.name.type, ['string', 'null']);
+      assert.ok(schema.required.includes('spec'));
+      assert.ok(!JSON.stringify(schema).includes('nullable'), 'nullable 대신 type 배열 사용');
+
+      gemini.state.vision = { name: '비타민D 1000IU', brand: null, spec: '1000IU', category: '알 수 없음', expiresAt: null };
+      const dup = await server.api('POST', '/api/products/recognize', { image: `data:image/png;base64,${PNG}` });
+      assert.equal(dup.json.suggestion.name, '비타민D 1000IU', '이미 제품명에 있는 규격은 다시 붙이지 않음');
+      assert.equal(dup.json.suggestion.category, null, "'알 수 없음'은 null로");
+
+      // 스키마를 거부하는 모델이면 스키마 없이 한 번 더 요청해 성공
+      gemini.state.rejectSchema = true;
+      gemini.state.visionCalls = 0;
+      const noSchema = await server.api('POST', '/api/products/recognize', { image: `data:image/png;base64,${PNG}` });
+      assert.equal(noSchema.status, 200);
+      assert.equal(gemini.state.visionCalls, 1);
+      assert.equal(gemini.state.lastConfig.responseJsonSchema, undefined);
+    } finally { await server.stop(); gemini.close(); }
+  });
+
+  test('판단 문구는 스키마로 요청하고, 서버가 계산한 수량·남은 기간을 넘김. AI 실패 시에도 숫자를 포함', async () => {
+    const gemini = await startFakeGemini();
+    const { dbPath } = tempDb();
+    const server = await startServer(dbPath, { GEMINI_API_KEY: 'test-key', GEMINI_API_BASE_URL: gemini.url });
+    try {
+      const expires = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+      await server.api('POST', '/api/products', { name: '비타민C 1000mg', brand: '고려은단', category: '영양제', quantity: 2, expiresAt: expires });
+
+      const ok = await server.api('POST', '/api/purchase-analysis', { query: '비타민C 1000mg' });
+      assert.equal(ok.json.verdict, 'same');
+      assert.equal(ok.json.provider, 'Gemini');
+      assert.deepEqual(gemini.state.lastConfig.responseJsonSchema.properties.decision.enum, ['BUY', 'CHECK_FIRST', 'HOLD']);
+      assert.match(gemini.state.lastPrompt, /보유 수량 2개, 사용기한 (29|30|31)일 남음 \(D-(29|30|31)\), 미개봉/);
+      assert.doesNotMatch(gemini.state.lastPrompt, /expiresAt/, '원본 날짜 대신 계산된 문장을 전달');
+
+      gemini.state.rejectSchema = true;
+      const retried = await server.api('POST', '/api/purchase-analysis', { query: '비타민C 1000mg' });
+      assert.equal(retried.json.provider, 'Gemini', '스키마 거부 시 스키마 없이 재요청해 AI 문구 사용');
+      gemini.state.rejectSchema = false;
+
+      gemini.state.failAdvice = true;
+      const fallback = await server.api('POST', '/api/purchase-analysis', { query: '비타민C 1000mg' });
+      assert.equal(fallback.status, 200);
+      assert.equal(fallback.json.provider, 'rules');
+      assert.equal(fallback.json.decision, 'HOLD');
+      assert.match(fallback.json.reason, /2개를 갖고 있어요 \(사용기한 (29|30|31)일 남음/);
+    } finally { await server.stop(); gemini.close(); }
+  });
+});
