@@ -1,10 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  createHold as createRemoteHold,
   createProduct as createRemoteProduct,
   deleteProduct as deleteRemoteProduct,
   listProducts,
+  listRecords,
+  markProductDone,
+  undoProductDone,
   updateProduct as updateRemoteProduct,
+  type ActivityRecord,
 } from '@/api/products';
 import {
   SEED,
@@ -39,9 +44,9 @@ interface Store extends State {
   setQuery: (q: string) => void;
   addRecent: (q: string) => void;
   removeRecent: (q: string) => void;
-  hold: (p: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => void;
-  markDone: (id: string) => void;
-  undoDone: (id: string) => void;
+  hold: (p: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => Promise<void>;
+  markDone: (id: string) => Promise<void>;
+  undoDone: (id: string) => Promise<void>;
   openToday: (id: string) => void;
   product: (id: string) => Product;
   products: () => Product[];
@@ -69,6 +74,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const [s, setS] = useState<State>(SEED);
   const [ready, setReady] = useState(false);
   const [remoteProducts, setRemoteProducts] = useState<Product[]>([]);
+  const [remoteRecords, setRemoteRecords] = useState<ActivityRecord[]>([]);
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -82,14 +88,19 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   }, [s]);
 
   const refreshProducts = useCallback(async () => {
-    const items = await listProducts();
+    const [items, records] = await Promise.all([listProducts(), listRecords()]);
     setRemoteProducts(items);
+    setRemoteRecords(records);
   }, []);
 
   useEffect(() => {
     let active = true;
-    listProducts()
-      .then((items) => { if (active) setRemoteProducts(items); })
+    Promise.all([listProducts(), listRecords()])
+      .then(([items, records]) => {
+        if (!active) return;
+        setRemoteProducts(items);
+        setRemoteRecords(records);
+      })
       .catch(() => {});
     return () => { active = false; };
   }, []);
@@ -119,29 +130,48 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     recents: [{ q, date: TODAY_SHORT } as RecentCheck, ...x.recents.filter((r) => r.q !== q)].slice(0, 5),
   })), []);
   const removeRecent = useCallback((q: string) => setS((x) => ({ ...x, recents: x.recents.filter((r) => r.q !== q) })), []);
-  const hold = useCallback(({ mode, query, verdict, productId }: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => {
-    setS((x) => {
-      const p = findProduct(x, productId);
-      const rec: HoldRecord = {
-        name: mode === 'photo' ? p.name : query,
-        match: verdict === 'same' ? '동일' : '유사',
-        date: TODAY,
-        isNew: true,
-      };
-      return { ...x, holdList: [rec, ...x.holdList.map((h) => ({ ...h, isNew: false }))] };
+  const recordDate = useCallback((value: string) => value.slice(0, 10).replace(/-/g, '.'), []);
+  const completed = useMemo(
+    () => remoteProducts.filter((item) => item.status === 'done').map((item) => item.id),
+    [remoteProducts],
+  );
+  const holdList = useMemo<HoldRecord[]>(() => remoteRecords
+    .filter((record) => record.type === 'hold')
+    .map((record, index) => ({
+      name: record.query || record.name,
+      match: record.match === 'same' ? '동일' : '유사',
+      date: recordDate(record.createdAt),
+      isNew: index === 0,
+    })), [recordDate, remoteRecords]);
+  const dones = useMemo<DoneRecord[]>(() => remoteRecords
+    .filter((record) => record.type === 'done' && record.category)
+    .map((record, index) => ({
+      name: record.name,
+      cat: record.category as Category,
+      date: recordDate(record.createdAt),
+      isNew: index === 0,
+    })), [recordDate, remoteRecords]);
+
+  const hold = useCallback(async ({ mode, query, verdict, productId }: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => {
+    if (verdict === 'none') throw new Error('보류할 보유 제품이 없어요.');
+    const p = findProduct(s, productId);
+    const records = await createRemoteHold({
+      productId,
+      query: mode === 'photo' ? p.name : query,
+      verdict,
     });
-  }, [findProduct]);
-  const markDone = useCallback((id: string) => setS((x) => {
-    if (x.completed.includes(id)) return x;
-    const p = findProduct(x, id);
-    const rec: DoneRecord = { name: p.name, cat: p.cat, date: TODAY, isNew: true };
-    return { ...x, dones: [rec, ...x.dones.map((d) => ({ ...d, isNew: false }))], completed: [...x.completed, id] };
-  }), [findProduct]);
-  const undoDone = useCallback((id: string) => setS((x) => ({
-    ...x,
-    completed: x.completed.filter((value) => value !== id),
-    dones: x.dones.slice(1),
-  })), []);
+    setRemoteRecords(records);
+  }, [findProduct, s]);
+  const markDone = useCallback(async (id: string) => {
+    const result = await markProductDone(id);
+    setRemoteProducts((current) => current.map((item) => item.id === id ? result.product : item));
+    setRemoteRecords(result.records);
+  }, []);
+  const undoDone = useCallback(async (id: string) => {
+    const result = await undoProductDone(id);
+    setRemoteProducts((current) => current.map((item) => item.id === id ? result.product : item));
+    setRemoteRecords(result.records);
+  }, []);
   const openToday = useCallback((id: string) => setS((x) => ({
     ...x,
     openedOverrides: { ...x.openedOverrides, [id]: TODAY },
@@ -200,6 +230,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     if (isRemote) {
       await deleteRemoteProduct(id);
       setRemoteProducts((current) => current.filter((item) => item.id !== id));
+      setRemoteRecords((current) => current.filter((record) => record.productId !== id));
     }
     setS((x) => ({
       ...x,
@@ -221,6 +252,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const reset = useCallback(async () => {
     await Promise.all(remoteProducts.map((item) => deleteRemoteProduct(item.id)));
     setRemoteProducts([]);
+    setRemoteRecords([]);
     setS(SEED);
     await AsyncStorage.setItem(KEY, JSON.stringify(SEED));
   }, [remoteProducts]);
@@ -228,6 +260,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => ({
     ...s,
     ready,
+    holdList,
+    dones,
+    completed,
     setQuery,
     addRecent,
     removeRecent,
@@ -249,7 +284,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setDevPhotoVerdict,
     setDevRegisterFail,
     reset,
-  }), [s, ready, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, products, registerProduct, updateProduct, deleteProduct, refreshProducts, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
+  }), [s, ready, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, products, registerProduct, updateProduct, deleteProduct, refreshProducts, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
