@@ -5,7 +5,6 @@ import { ScrollView, View } from 'react-native';
 import { Screen, Scroll } from '@/components/shell';
 import { DBadge, DButton, ddayBadge, Hair, Icon, Line, Press, ProdImg, T } from '@/components/ui';
 import { byDday, CATEGORIES } from '@/data/products';
-import { useOpenCamera } from '@/hooks/use-open-camera';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
@@ -13,7 +12,6 @@ const CATS = ['전체', ...CATEGORIES];
 
 export default function Items() {
   const { products, completed } = useApp();
-  const openCamera = useOpenCamera();
   const [cat, setCat] = useState('전체');
   const all = products().filter((p) => !completed.includes(p.id)).sort(byDday);
   const list = cat === '전체' ? all : all.filter((p) => p.cat === cat);
@@ -28,8 +26,8 @@ export default function Items() {
           <Icon name="storage" size={32} color={C.neutral} />
         </View>
         <T style={[tx(20, 28, 700), { marginTop: 20, textAlign: 'center' }]}>아직 등록한 제품이 없어요</T>
-        <T style={[tx(15, 22, 400, C.alt), { marginTop: 8, textAlign: 'center' }]}>{'가진 제품을 찍어 등록하면\n사기 전에 있는지 바로 확인할 수 있어요.'}</T>
-        <View style={{ alignSelf: 'stretch', marginTop: 28 }}><DButton label="제품 등록" icon="camera" onPress={() => openCamera('register')} /></View>
+        <T style={[tx(15, 22, 400, C.alt), { marginTop: 8, textAlign: 'center' }]}>{'사진을 찍거나 직접 입력해 등록하면\n사기 전에 있는지 바로 확인할 수 있어요.'}</T>
+        <View style={{ alignSelf: 'stretch', marginTop: 28 }}><DButton label="제품 등록" onPress={() => router.push('/register-method')} /></View>
       </View>
     </Screen>
   );
