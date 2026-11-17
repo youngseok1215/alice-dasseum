@@ -56,7 +56,7 @@ interface Store extends State {
   finishOnboarding: () => void;
   setDevPhotoVerdict: (v: PhotoVerdict) => void;
   setDevRegisterFail: (v: State['devRegisterFail']) => void;
-  reset: () => void;
+  reset: () => Promise<void>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -218,11 +218,12 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const finishOnboarding = useCallback(() => setS((x) => ({ ...x, onboarded: true })), []);
   const setDevPhotoVerdict = useCallback((devPhotoVerdict: PhotoVerdict) => setS((x) => ({ ...x, devPhotoVerdict })), []);
   const setDevRegisterFail = useCallback((devRegisterFail: State['devRegisterFail']) => setS((x) => ({ ...x, devRegisterFail })), []);
-  const reset = useCallback(() => {
-    setS(SEED);
+  const reset = useCallback(async () => {
+    await Promise.all(remoteProducts.map((item) => deleteRemoteProduct(item.id)));
     setRemoteProducts([]);
-    refreshProducts().catch(() => {});
-  }, [refreshProducts]);
+    setS(SEED);
+    await AsyncStorage.setItem(KEY, JSON.stringify(SEED));
+  }, [remoteProducts]);
 
   const value = useMemo(() => ({
     ...s,
