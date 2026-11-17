@@ -7,8 +7,6 @@ import {
   updateProduct as updateRemoteProduct,
 } from '@/api/products';
 import {
-  ALL_IDS,
-  PRODUCTS,
   SEED,
   TODAY,
   TODAY_SHORT,
@@ -24,7 +22,7 @@ import {
   type Verdict,
 } from '@/data/products';
 
-const KEY = 'dasseum-app-v14';
+const KEY = 'dasseum-app-v15-empty-state';
 type State = typeof SEED;
 type ProductForm = {
   name: string;
@@ -98,9 +96,8 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
 
   const findProduct = useCallback((state: State, id: string): Product => {
     const base = remoteProducts.find((p) => p.id === id)
-      ?? state.registeredProducts.find((p) => p.id === id)
-      ?? PRODUCTS[id]
-      ?? PRODUCTS.vitd;
+      ?? state.registeredProducts.find((p) => p.id === id);
+    if (!base) throw new Error('등록된 제품을 찾을 수 없어요.');
     const edit = state.productEdits?.[base.id];
     const opened = state.openedOverrides[base.id];
     const current = { ...base, ...(edit || {}), ...(opened ? { opened } : {}) };
@@ -112,7 +109,6 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const products = useCallback(() => {
     const byId = new Map<string, Product>();
     remoteProducts.forEach((item) => byId.set(item.id, product(item.id)));
-    ALL_IDS.forEach((id) => { if (!byId.has(id)) byId.set(id, product(id)); });
     s.registeredProducts.forEach((item) => { if (!byId.has(item.id)) byId.set(item.id, product(item.id)); });
     return [...byId.values()];
   }, [product, remoteProducts, s.registeredProducts]);
