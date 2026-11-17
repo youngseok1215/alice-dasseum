@@ -130,7 +130,11 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     recents: [{ q, date: TODAY_SHORT } as RecentCheck, ...x.recents.filter((r) => r.q !== q)].slice(0, 5),
   })), []);
   const removeRecent = useCallback((q: string) => setS((x) => ({ ...x, recents: x.recents.filter((r) => r.q !== q) })), []);
-  const recordDate = useCallback((value: string) => value.slice(0, 10).replace(/-/g, '.'), []);
+  const recordDate = useCallback((value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value.slice(0, 10).replace(/-/g, '.');
+    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('.');
+  }, []);
   const completed = useMemo(
     () => remoteProducts.filter((item) => item.status === 'done').map((item) => item.id),
     [remoteProducts],
