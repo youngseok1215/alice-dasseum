@@ -5,12 +5,10 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { Screen, Scroll } from '@/components/shell';
 import { Card, DBadge, ddayBadge, Icon, IconBtn, Line, Mascot, Press, ProdImg, SectionHead, T } from '@/components/ui';
 import { byDday, reasonOf } from '@/data/products';
-import { useOpenCamera } from '@/hooks/use-open-camera';
 import { useApp } from '@/store/AppStore';
 import { BRAND_FONT, C, tx } from '@/theme/tokens';
 
 export default function Home() {
-  const openCamera = useOpenCamera();
   const { holdList, dones, products, completed, notifyEnabled, alertsSeen, markAlertsSeen } = useApp();
   const activeProducts = products().filter((p) => !completed.includes(p.id));
   const firsts = activeProducts.filter((p) => reasonOf(p)).sort(byDday);
@@ -40,11 +38,11 @@ export default function Home() {
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingBottom: 28 }}>
-          <Card onPress={() => openCamera('register')} style={{ flex: 1, padding: 16, minHeight: 112, justifyContent: 'space-between' }}>
+          <Card onPress={() => router.push('/register-method')} style={{ flex: 1, padding: 16, minHeight: 112, justifyContent: 'space-between' }}>
             <Icon name="camera" size={24} />
             <View>
               <T style={tx(16, 24, 800)}>제품 등록</T>
-              <T style={tx(13, 18, 400, C.alt)}>찍어서 내 물품에 추가</T>
+              <T style={tx(13, 18, 400, C.alt)}>사진 또는 직접 입력</T>
             </View>
           </Card>
           <Card tone="mint" onPress={() => router.push('/check')} style={{ flex: 1, padding: 16, minHeight: 112, justifyContent: 'space-between' }}>
