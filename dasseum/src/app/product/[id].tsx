@@ -26,7 +26,14 @@ export default function Detail() {
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>{val}</View>
     </View>
   );
-  const onDone = () => { markDone(p.id); router.replace({ pathname: '/done/[id]', params: { id: p.id, ...(from ? { from } : {}) } }); };
+  const onDone = async () => {
+    try {
+      await markDone(p.id);
+      router.replace({ pathname: '/done/[id]', params: { id: p.id, ...(from ? { from } : {}) } });
+    } catch (error) {
+      Alert.alert('다씀으로 기록하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    }
+  };
   // 프로토타입 onDelete: 내 물품 탭으로 이동 + 토스트
   const onDelete = async () => {
     try {
