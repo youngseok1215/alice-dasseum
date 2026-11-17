@@ -436,6 +436,14 @@ function sendHealth(response) {
 }
 
 const server = createServer(async (request, response) => {
+  // 요청마다 한 줄 로그: 휴대폰 요청이 서버에 도착했는지, 어디서 느린지 바로 확인용 (사진 파일 요청은 제외)
+  const started = Date.now();
+  response.on('finish', () => {
+    const path = (request.url ?? '').split('?')[0];
+    if (path.startsWith('/api/images/') && request.method === 'GET') return;
+    const ms = Date.now() - started;
+    console.log(`[req] ${request.method} ${path} ${response.statusCode} ${ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`}`);
+  });
   try {
     const url = new URL(request.url, 'http://localhost');
     const path = url.pathname;

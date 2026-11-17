@@ -138,9 +138,9 @@ export function getPendingPurchaseAnalysis() {
 
 export async function analyzePurchase(query: string, purpose?: string, signal?: AbortSignal) {
   pendingPurchaseAnalysis = undefined;
-  // 백엔드: 임베딩(10초×2) + 판단 문구(12초×2)까지 고려한 여유 시간
   const result = await apiRequest<Partial<PurchaseAnalysis>>('/api/purchase-analysis', {
-    method: 'POST', body: { query, purpose }, signal, timeoutMs: 75_000, failMessage: 'AI 분석을 하지 못했어요.',
+    // 서버 최악: 임베딩(10초×2)·판단 문구(12초×2, 스키마 거부 시 +12초) ≈ 80초 → 여유 있게 100초
+    method: 'POST', body: { query, purpose }, signal, timeoutMs: 100_000, failMessage: 'AI 분석을 하지 못했어요.',
   });
   failIf(result, result.ok && Boolean(result.payload.verdict), '유사 제품을 분석하지 못했어요.');
   pendingPurchaseAnalysis = result.payload as PurchaseAnalysis;
@@ -149,7 +149,8 @@ export async function analyzePurchase(query: string, purpose?: string, signal?: 
 
 export async function recognizePhoto(image: string, signal?: AbortSignal) {
   const result = await apiRequest<{ suggestion?: ProductSuggestion }>('/api/products/recognize', {
-    method: 'POST', body: { image }, signal, timeoutMs: 55_000, failMessage: '사진을 인식하지 못했어요.',
+    // 서버 최악 약 46초 + 사진 업로드 시간 → 75초
+    method: 'POST', body: { image }, signal, timeoutMs: 75_000, failMessage: '사진을 인식하지 못했어요.',
   });
   if (result.status === 413) failIf(result, false, '사진이 너무 커요. 더 작은 사진으로 다시 시도해 주세요.');
   failIf(result, result.ok && Boolean(result.payload.suggestion), '사진을 인식하지 못했어요.');

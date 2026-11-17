@@ -76,13 +76,15 @@ export async function recognizeProduct(image, categories) {
     }
 
     const provider = geminiKey ? 'Gemini' : 'Elice';
-    let response = await fetchWithRetry(endpoint, options, { timeoutMs: 20_000, retries: 1, label: `photo recognition ${provider}` });
+    // 시도당 15초 · 재시도 1회 · 스키마 거부 시 1회 더 → 최악 약 46초 (앱 대기 75초보다 짧게)
+    const startedAt = Date.now();
+    let response = await fetchWithRetry(endpoint, options, { timeoutMs: 15_000, retries: 1, label: `photo recognition ${provider}` });
     if (geminiKey && response.status === 400) {
       // 모델이 스키마를 받아들이지 않는 경우를 대비해 스키마 없이 한 번만 다시 요청 (프롬프트로 JSON 요구는 유지)
       console.warn('[photo recognition] Gemini 400 with responseJsonSchema, retrying without schema');
       const body = JSON.parse(options.body);
       delete body.generationConfig.responseJsonSchema;
-      response = await fetchWithRetry(endpoint, { ...options, body: JSON.stringify(body) }, { timeoutMs: 20_000, retries: 0, label: `photo recognition ${provider}` });
+      response = await fetchWithRetry(endpoint, { ...options, body: JSON.stringify(body) }, { timeoutMs: 15_000, retries: 0, label: `photo recognition ${provider}` });
     }
     if (!response.ok) {
       const failure = geminiKey ? await response.json().catch(() => null) : null;
@@ -114,6 +116,7 @@ export async function recognizeProduct(image, categories) {
     const date = new Date(expiry + 'T00:00:00Z');
     const expiresAt = /^\d{4}-\d{2}-\d{2}$/.test(expiry) &&
       !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === expiry ? expiry : null;
+    console.log(`[photo recognition] ${provider} ${((Date.now() - startedAt) / 1000).toFixed(1)}s · ${typeof fields.name === 'string' ? fields.name.slice(0, 40) : '제품명 없음'}${fields.expiresAt ? ` · 사용기한 ${fields.expiresAt}` : ''}`);
     const rawName = typeof fields.name === 'string' ? fields.name.trim().slice(0, 200) || null : null;
     const spec = typeof fields.spec === 'string' ? fields.spec.trim().slice(0, 100) || null : null;
     return {
