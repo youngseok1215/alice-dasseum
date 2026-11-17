@@ -1,7 +1,7 @@
 // + 다씀 완료 — 5초 동안 '되돌리기' 스낵바 표시
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, View } from 'react-native';
+import { Alert, Animated, Easing, View } from 'react-native';
 import { nav, Screen, useToast } from '@/components/shell';
 import { ActionArea, Card, DBadge, DButton, Mascot, Press, ProdImg, T } from '@/components/ui';
 import { TODAY } from '@/data/products';
@@ -23,10 +23,14 @@ export default function Done() {
   }, [fade]);
 
   // 프로토타입 onUndo: 기록을 되돌리고 상세 화면으로 복귀
-  const onUndo = () => {
-    undoDone(p.id);
-    router.replace({ pathname: '/product/[id]', params: { id: p.id, ...(from ? { from } : {}) } });
-    toast('다씀 기록을 되돌렸어요');
+  const onUndo = async () => {
+    try {
+      await undoDone(p.id);
+      router.replace({ pathname: '/product/[id]', params: { id: p.id, ...(from ? { from } : {}) } });
+      toast('다씀 기록을 되돌렸어요');
+    } catch (error) {
+      Alert.alert('기록을 되돌리지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    }
   };
   // 프로토타입 onConfirm: 확인 결과에서 들어왔으면 내 물품 탭으로, 아니면 이전 목록으로
   const onConfirm = () => (from === 'result' ? nav.reset('/items') : nav.back());
@@ -47,7 +51,7 @@ export default function Done() {
         </Card>
         <Card style={{ width: '100%', marginTop: 10, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <T style={tx(14, 20, 600, C.neutral)}>지금까지 다 쓴 제품</T>
-          <T style={tx(17, 24, 700)}>{11 + dones.length}개</T>
+          <T style={tx(17, 24, 700)}>{dones.length}개</T>
         </Card>
       </View>
       <ActionArea>
