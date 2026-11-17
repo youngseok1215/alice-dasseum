@@ -1,4 +1,4 @@
-# 다씀 배포·실행 가이드 (`feature/final-deployment`)
+# 다씀 배포·실행 가이드 (`feature/final-deployment-1118`)
 
 앱(`dasseum/`, Expo)과 백엔드(`backend/`, Node.js + SQLite)를 실행·배포하는 방법입니다.
 API 키는 **백엔드 환경변수에만** 둡니다. 앱 번들에는 `EXPO_PUBLIC_API_URL`(서버 주소)만 들어갑니다.

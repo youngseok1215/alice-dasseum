@@ -14,7 +14,7 @@
 
 API 키와 `.env`, `backend/.data/`, 업로드 사진은 Git에 올리지 않습니다.
 
-## 배포·실행 (`feature/final-deployment`)
+## 배포·실행 (`feature/final-deployment-1118`)
 
 서버 배포, 환경변수, `GET /api/health`, 데이터 영속성, 테스트 방법은 [DEPLOY.md](./DEPLOY.md)를 참고하세요.
 
