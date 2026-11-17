@@ -17,6 +17,17 @@ export type CreateProductInput = {
   imageUri?: string;
 };
 
+export type PurchaseAnalysis = {
+  query: string;
+  verdict: 'same' | 'similar' | 'none';
+  matches: { productId: string; similarity: number }[];
+  decision: 'BUY' | 'CHECK_FIRST' | 'HOLD';
+  title: string;
+  reason: string;
+  provider: 'Elice' | 'Gemini' | 'rules';
+  embeddingProvider: 'Gemini';
+};
+
 type StoredProduct = {
   id: string;
   name: string;
@@ -32,6 +43,7 @@ type StoredProduct = {
 let pendingPhoto: string | undefined;
 let pendingExpiryPhoto: string | undefined;
 let pendingSuggestion: ProductSuggestion | undefined;
+let pendingPurchaseAnalysis: PurchaseAnalysis | undefined;
 
 function apiBaseUrl() {
   const value = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
@@ -87,6 +99,27 @@ export function clearPendingRegistration() {
   pendingPhoto = undefined;
   pendingExpiryPhoto = undefined;
   pendingSuggestion = undefined;
+}
+
+export function getPendingPurchaseAnalysis() {
+  return pendingPurchaseAnalysis;
+}
+
+export async function analyzePurchase(query: string, purpose?: string, signal?: AbortSignal) {
+  pendingPurchaseAnalysis = undefined;
+  const response = await fetch(`${apiBaseUrl()}/api/purchase-analysis`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, purpose }),
+    signal,
+  }).catch(() => {
+    throw new Error('AI 분석 서버에 연결할 수 없어요. 서버 주소와 Wi-Fi를 확인해 주세요.');
+  });
+  const payload = await response.json().catch(() => ({})) as Partial<PurchaseAnalysis> & { error?: string };
+  if (response.status === 503) throw new Error(payload.error || '백엔드에 Gemini API 키를 설정해 주세요.');
+  if (!response.ok || !payload.verdict) throw new Error(payload.error || '유사 제품을 분석하지 못했어요.');
+  pendingPurchaseAnalysis = payload as PurchaseAnalysis;
+  return pendingPurchaseAnalysis;
 }
 
 export async function recognizePhoto(image: string, signal?: AbortSignal) {
