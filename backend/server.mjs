@@ -468,7 +468,7 @@ const server = createServer(async (request, response) => {
     }
     insert.run(product.id, product.name, product.brand ?? null, product.category, product.quantity,
       product.openedAt ?? null, product.expiresAt ?? null, product.imageUri ?? null, product.createdAt);
-    send(response, 201, { product });
+    send(response, 201, { product: publicProduct(findById.get(product.id)) });
   } catch (error) {
     console.error(error);
     if (!response.destroyed && !response.headersSent) send(response, 500, { error: 'Internal server error' });
