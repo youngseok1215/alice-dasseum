@@ -147,11 +147,56 @@ async function saveRequestedImage(body) {
   throw new Error('Choose an image first');
 }
 
-async function searchProductImages(image) {
+async function searchKakaoProductImages(query) {
+  const apiKey = process.env.KAKAO_REST_API_KEY?.trim();
+  if (!apiKey) return undefined;
+  const text = typeof query === 'string' ? query.trim() : '';
+  if (text.length < 2 || text.length > 200) return { configured: true, images: [] };
+
+  const endpoint = new URL('https://dapi.kakao.com/v2/search/image');
+  endpoint.searchParams.set('query', text);
+  endpoint.searchParams.set('sort', 'accuracy');
+  endpoint.searchParams.set('size', '12');
+  const response = await fetch(endpoint, {
+    headers: { Authorization: `KakaoAK ${apiKey}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !Array.isArray(payload.documents)) {
+    throw new Error(`Kakao image search failed (${response.status})`);
+  }
+
+  const images = [];
+  const seen = new Set();
+  for (const item of payload.documents) {
+    const imageUrl = typeof item?.image_url === 'string' ? item.image_url : '';
+    const thumbnail = typeof item?.thumbnail_url === 'string' ? item.thumbnail_url : imageUrl;
+    if (!imageUrl || !thumbnail || seen.has(imageUrl)) continue;
+    let image;
+    let preview;
+    try {
+      image = new URL(imageUrl);
+      preview = new URL(thumbnail);
+    } catch {
+      continue;
+    }
+    if (!['http:', 'https:'].includes(image.protocol) || preview.protocol !== 'https:') continue;
+    seen.add(imageUrl);
+    images.push({
+      url: imageUrl,
+      thumbnail,
+      title: item.display_sitename || '인터넷에서 찾은 제품 사진',
+    });
+    if (images.length === 3) break;
+  }
+  return { configured: true, provider: 'Kakao', images };
+}
+
+async function searchVisionProductImages(image) {
   const apiKey = process.env.GOOGLE_CLOUD_VISION_API_KEY?.trim();
-  if (!apiKey) return { configured: false, images: [] };
-  const match = /^data:image\/(?:jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(image ?? '');
-  if (!match) throw new Error('Invalid image data');
+  if (!apiKey || typeof image !== 'string') return undefined;
+  const match = /^data:image\/(?:jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(image);
+  if (!match) return undefined;
 
   const response = await fetch(
     `https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(apiKey)}`,
@@ -168,9 +213,7 @@ async function searchProductImages(image) {
     },
   );
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.error) {
-    throw new Error(`Google Web Detection failed (${response.status})`);
-  }
+  if (!response.ok || payload.error) throw new Error(`Google Web Detection failed (${response.status})`);
   const web = payload.responses?.[0]?.webDetection;
   const title = web?.bestGuessLabels?.[0]?.label ?? '웹에서 찾은 유사 제품 사진';
   const candidates = [
@@ -189,7 +232,15 @@ async function searchProductImages(image) {
     images.push({ url: candidate.url, thumbnail: candidate.url, title });
     if (images.length === 3) break;
   }
-  return { configured: true, images };
+  return { configured: true, provider: 'Google Vision', images };
+}
+
+async function searchProductImages({ query, image }) {
+  const kakao = await searchKakaoProductImages(query);
+  if (kakao) return kakao;
+  const vision = await searchVisionProductImages(image);
+  if (vision) return vision;
+  return { configured: false, images: [] };
 }
 
 async function readJson(request, response, maxBytes) {
@@ -296,10 +347,10 @@ const server = createServer(async (request, response) => {
     }
     if (path === '/api/products/images/search') {
       try {
-        return send(response, 200, await searchProductImages(body?.image));
+        return send(response, 200, await searchProductImages({ query: body?.query, image: body?.image }));
       } catch (error) {
         console.error(error);
-        return send(response, 502, { error: 'Google에서 유사 제품 사진을 찾지 못했어요.' });
+        return send(response, 502, { error: '인터넷에서 제품 사진을 찾지 못했어요.' });
       }
     }
     if (path === '/api/products/images') {
