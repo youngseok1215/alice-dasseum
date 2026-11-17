@@ -34,6 +34,7 @@ if (!productColumns.has('brand')) database.exec('ALTER TABLE products ADD COLUMN
 if (!productColumns.has('imageUri')) database.exec('ALTER TABLE products ADD COLUMN imageUri TEXT');
 if (!productColumns.has('status')) database.exec("ALTER TABLE products ADD COLUMN status TEXT NOT NULL DEFAULT 'owned'");
 if (!productColumns.has('completedAt')) database.exec('ALTER TABLE products ADD COLUMN completedAt TEXT');
+if (!productColumns.has('memo')) database.exec('ALTER TABLE products ADD COLUMN memo TEXT');
 
 database.exec(`
   CREATE TABLE IF NOT EXISTS activity_records (
@@ -49,14 +50,14 @@ database.exec(`
 `);
 
 const insert = database.prepare(`
-  INSERT INTO products (id, name, brand, category, quantity, openedAt, expiresAt, imageUri, createdAt)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO products (id, name, brand, category, quantity, openedAt, expiresAt, imageUri, memo, createdAt)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const list = database.prepare('SELECT * FROM products ORDER BY createdAt DESC, rowid DESC');
 const findById = database.prepare('SELECT * FROM products WHERE id = ?');
 const update = database.prepare(`
   UPDATE products
-  SET name = ?, brand = ?, category = ?, quantity = ?, openedAt = ?, expiresAt = ?, imageUri = ?
+  SET name = ?, brand = ?, category = ?, quantity = ?, openedAt = ?, expiresAt = ?, imageUri = ?, memo = ?
   WHERE id = ?
 `);
 const remove = database.prepare('DELETE FROM products WHERE id = ?');
@@ -97,7 +98,7 @@ function sendImage(response, path) {
   response.end(readFileSync(path));
 }
 
-function publicProduct({ openedAt, expiresAt, completedAt, brand, imageUri, ...product }) {
+function publicProduct({ openedAt, expiresAt, completedAt, brand, imageUri, memo, ...product }) {
   return {
     ...product,
     openedAt: openedAt ?? undefined,
@@ -105,6 +106,7 @@ function publicProduct({ openedAt, expiresAt, completedAt, brand, imageUri, ...p
     completedAt: completedAt ?? undefined,
     brand: brand ?? undefined,
     imageUri: imageUri ?? undefined,
+    memo: memo ?? undefined,
   };
 }
 
@@ -150,6 +152,7 @@ function parseProduct(body) {
     openedAt: optionalDate(body.openedAt, 'openedAt'),
     expiresAt: optionalDate(body.expiresAt, 'expiresAt'),
     imageUri: optionalText(body.imageUri, 'imageUri', 2_000),
+    memo: optionalText(body.memo, 'memo', 500),
     createdAt: new Date().toISOString(),
   };
 }
@@ -423,12 +426,14 @@ const server = createServer(async (request, response) => {
           openedAt: body?.openedAt ?? existing.openedAt ?? undefined,
           expiresAt: body?.expiresAt ?? existing.expiresAt ?? undefined,
           imageUri: body?.imageUri ?? existing.imageUri,
+          memo: body?.memo ?? existing.memo ?? undefined,
         });
       } catch (error) {
         return send(response, 400, { error: error.message });
       }
       update.run(changed.name, changed.brand ?? null, changed.category, changed.quantity,
-        changed.openedAt ?? null, changed.expiresAt ?? null, changed.imageUri ?? null, productMatch[1]);
+        changed.openedAt ?? null, changed.expiresAt ?? null, changed.imageUri ?? null,
+        changed.memo ?? null, productMatch[1]);
       return send(response, 200, { product: publicProduct(findById.get(productMatch[1])) });
     }
     if (request.method === 'PATCH') return send(response, 404, { error: 'Not found' });
@@ -467,7 +472,8 @@ const server = createServer(async (request, response) => {
       return send(response, 400, { error: error.message });
     }
     insert.run(product.id, product.name, product.brand ?? null, product.category, product.quantity,
-      product.openedAt ?? null, product.expiresAt ?? null, product.imageUri ?? null, product.createdAt);
+      product.openedAt ?? null, product.expiresAt ?? null, product.imageUri ?? null,
+      product.memo ?? null, product.createdAt);
     send(response, 201, { product: publicProduct(findById.get(product.id)) });
   } catch (error) {
     console.error(error);
