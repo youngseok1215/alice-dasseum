@@ -190,7 +190,9 @@ export async function analyzePurchase(query, purpose, products) {
     const verdict = exact ? 'same' : !top || top.similarity < similarityThreshold ? 'none' : 'similar';
     const selected = verdict === 'none'
       ? []
-      : ranked.filter((item) => item.similarity >= Math.max(similarityThreshold, top.similarity - 0.05)).slice(0, 3);
+      : verdict === 'same'
+        ? [top]
+        : ranked.filter((item) => item.similarity >= Math.max(similarityThreshold, top.similarity - 0.05)).slice(0, 3);
     const advice = await generateAdvice({
       query: trimmed,
       purpose: purpose?.trim(),
