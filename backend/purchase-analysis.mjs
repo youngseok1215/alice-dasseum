@@ -7,11 +7,18 @@ function compact(value) {
 }
 
 function productText(product) {
-  return [
-    `브랜드: ${product.brand || '미상'}`,
-    `제품명: ${product.name}`,
-    `카테고리: ${product.category}`,
-  ].join('\n');
+  return [product.brand, product.name].filter(Boolean).join(' ');
+}
+
+function inferCategory(value) {
+  const text = compact(value);
+  const rules = [
+    ['생활용품', /샴푸|린스|트리트먼트|치약|칫솔|세제|섬유유연제|휴지|물티슈|주방용품|충전기|케이블/],
+    ['영양제', /프로바이오틱스|유산균|비타민|영양제|오메가3|루테인|철분|마그네슘|아연|홍삼/],
+    ['의약품', /의약품|감기약|진통제|소화제|연고|인공눈물|타이레놀|해열제|알레르기약/],
+    ['화장품', /토너|스킨|로션|에센스|세럼|선크림|립밤|파운데이션|쿠션|클렌징|마스카라/],
+  ];
+  return rules.find(([, pattern]) => pattern.test(text))?.[0];
 }
 
 function cosine(left, right) {
@@ -164,8 +171,12 @@ export async function analyzePurchase(query, purpose, products) {
 
   try {
     const trimmed = query.trim();
-    const queryEmbedding = await embedText(`구매 예정 제품: ${trimmed}`, apiKey);
-    const ranked = await Promise.all(products.map(async (product) => ({
+    const queryCategory = inferCategory(trimmed);
+    const candidates = queryCategory
+      ? products.filter((product) => product.category === queryCategory)
+      : products;
+    const queryEmbedding = await embedText(trimmed, apiKey);
+    const ranked = await Promise.all(candidates.map(async (product) => ({
       product,
       similarity: cosine(queryEmbedding, await productEmbedding(product, apiKey)),
     })));
@@ -175,10 +186,11 @@ export async function analyzePurchase(query, purpose, products) {
     const productKey = top ? compact(`${top.product.brand ?? ''}${top.product.name}`) : '';
     const productNameKey = top ? compact(top.product.name) : '';
     const exact = Boolean(top && (queryKey === productKey || queryKey === productNameKey));
-    const verdict = !top || top.similarity < 0.68 ? 'none' : exact ? 'same' : 'similar';
+    const similarityThreshold = 0.8;
+    const verdict = exact ? 'same' : !top || top.similarity < similarityThreshold ? 'none' : 'similar';
     const selected = verdict === 'none'
       ? []
-      : ranked.filter((item) => item.similarity >= Math.max(0.68, top.similarity - 0.08)).slice(0, 3);
+      : ranked.filter((item) => item.similarity >= Math.max(similarityThreshold, top.similarity - 0.05)).slice(0, 3);
     const advice = await generateAdvice({
       query: trimmed,
       purpose: purpose?.trim(),
