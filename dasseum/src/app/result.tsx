@@ -9,6 +9,7 @@ import { nav, Screen, Scroll, useToast } from '@/components/shell';
 import { ActionArea, Card, DBadge, DButton, ddayBadge, Hair, Icon, Line, ProdImg, T, TopBar } from '@/components/ui';
 import { matchOwnedProducts, type CheckMode } from '@/data/products';
 import { useOpenCamera } from '@/hooks/use-open-camera';
+import { useBusy } from '@/hooks/use-busy';
 import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
 
@@ -19,6 +20,7 @@ export default function Result() {
   const album = params.album === '1';
   const { product, hasProduct, products, completed, hold, setQuery } = useApp();
   const toast = useToast();
+  const [busy, run] = useBusy();
   const openCamera = useOpenCamera();
   const [ask, setAsk] = useState(false);
   const pendingAnalysis = getPendingPurchaseAnalysis();
@@ -40,7 +42,7 @@ export default function Result() {
   }[r.verdict];
   const isSupp = r.items.some((k) => ['영양제', '의약품'].includes(product(k).cat));
 
-  const onHold = async () => {
+  const onHold = () => run(async () => {
     try {
       await hold({ mode, query: q, verdict: r.verdict, productId: r.items[0] });
       router.push({ pathname: '/held', params: { item: r.items[0] } });
@@ -48,7 +50,7 @@ export default function Result() {
     } catch (error) {
       Alert.alert('구매 보류를 기록하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
     }
-  };
+  });
   const onContinue = () => { setAsk(false); setQuery(''); nav.reset('/check'); };
   // '등록하기': 구매 전 확인을 처음 상태로 돌리고 제품 등록 촬영으로
   const onRegister = () => { onContinue(); openCamera('register'); };
@@ -123,7 +125,7 @@ export default function Result() {
           </>
         ) : (
           <>
-            <DButton label="구매 보류" onPress={onHold} />
+            <DButton label="구매 보류" disabled={busy} onPress={onHold} />
             <DButton label="그래도 구매할게요" variant="outlined" onPress={() => setAsk(true)} />
           </>
         )}

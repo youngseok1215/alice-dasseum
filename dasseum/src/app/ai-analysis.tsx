@@ -7,6 +7,7 @@ import { nav, Screen, Scroll, useToast } from '@/components/shell';
 import { ActionArea, Card, DBadge, DButton, Hair, Icon, T, TopBar } from '@/components/ui';
 import { useOpenCamera } from '@/hooks/use-open-camera';
 import { MissingProduct } from '@/components/missing-product';
+import { useBusy } from '@/hooks/use-busy';
 import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
 
@@ -40,8 +41,9 @@ function AiAnalysisScreen() {
   );
   const [analyzing, setAnalyzing] = useState(false);
   const toast = useToast();
+  const [busy, run] = useBusy();
   const result = purpose ? RESULTS[purpose] ?? ['neutral', '목적에 맞는지 확인해 보세요', `‘${purpose}’ 용도라면 필요한 출력을 먼저 확인해 보세요. 25W로 충분하다면 지금 가진 충전기를 먼저 써 보세요.`] : null;
-  const onHold = async () => {
+  const onHold = () => run(async () => {
     try {
       await hold({ mode: mode === 'photo' ? 'photo' : 'search', query: q, verdict: 'similar', productId: p.id });
       router.replace({ pathname: '/held', params: { item: p.id } });
@@ -49,7 +51,7 @@ function AiAnalysisScreen() {
     } catch (error) {
       Alert.alert('구매 보류를 기록하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
     }
-  };
+  });
   const continuePurchase = () => { setQuery(''); router.replace('/check'); };
   const ddayText = p.dday == null ? '기한 미입력' : p.dday < 0 ? '기한 지남' : p.dday === 0 ? '오늘까지' : `D-${p.dday}`;
   const rows = generic
@@ -98,7 +100,7 @@ function AiAnalysisScreen() {
         {charger && !result && <View style={{ marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, backgroundColor: C.white }}><Hair radius={12} /><T style={tx(14, 21, 500)}>정확한 판단을 위해 어디에 쓸지 알려 주세요.</T></View>}
         <View style={{ marginTop: 20, padding: 14, borderRadius: 12, backgroundColor: C.white, flexDirection: 'row', gap: 8 }}><Hair radius={12} color={C.lineNeutral} /><Icon name="circleInfo" size={18} color={C.negative} style={{ marginTop: 1.5 }} /><T style={[tx(14, 21, 400, C.neutral), { flex: 1 }]}>{supplement || med ? '영양제·의약품은 효능, 복용량, 대체 가능 여부를 AI가 판단하지 않아요. 필요하면 약사나 의사와 상담해 주세요.' : 'AI 분석은 제품 정보를 바탕으로 한 참고 의견이에요.'}</T></View>
       </Scroll>
-      <ActionArea>{charger && !result ? <><DButton label="구매 목적 입력하기" onPress={() => setSheet(true)} /><DButton label="구매 보류" variant="outlined" onPress={onHold} /></> : <><DButton label="구매 보류" onPress={onHold} /><DButton label="그래도 구매할게요" variant="outlined" onPress={() => setAsk(true)} /></>}</ActionArea>
+      <ActionArea>{charger && !result ? <><DButton label="구매 목적 입력하기" onPress={() => setSheet(true)} /><DButton label="구매 보류" variant="outlined" disabled={busy} onPress={onHold} /></> : <><DButton label="구매 보류" disabled={busy} onPress={onHold} /><DButton label="그래도 구매할게요" variant="outlined" onPress={() => setAsk(true)} /></>}</ActionArea>
       <Modal visible={ask} transparent animationType="fade" onRequestClose={() => setAsk(false)}>
         <Pressable onPress={() => setAsk(false)} style={{ flex: 1, backgroundColor: 'rgba(23,23,25,0.4)', justifyContent: 'flex-end' }}>
           <Pressable onPress={() => {}} style={{ backgroundColor: C.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 20, paddingBottom: 30 }}>

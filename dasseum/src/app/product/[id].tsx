@@ -8,6 +8,7 @@ import { nav, Screen, Scroll, useToast } from '@/components/shell';
 import { ActionArea, DBadge, DButton, ddayBadge, Hair, Icon, IconBtn, Line, Press, T, TextBtn, TopBar } from '@/components/ui';
 import { reasonOf } from '@/data/products';
 import { MissingProduct } from '@/components/missing-product';
+import { useBusy } from '@/hooks/use-busy';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
@@ -15,6 +16,7 @@ function DetailScreen() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const { product, openToday, markDone, setProductQuantity, deleteProduct } = useApp();
   const toast = useToast();
+  const [busy, run] = useBusy();
   const [menu, setMenu] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [quantitySaving, setQuantitySaving] = useState(false);
@@ -28,16 +30,16 @@ function DetailScreen() {
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>{val}</View>
     </View>
   );
-  const onDone = async () => {
+  const onDone = () => run(async () => {
     try {
       await markDone(p.id);
       router.replace({ pathname: '/done/[id]', params: { id: p.id, ...(from ? { from } : {}) } });
     } catch (error) {
       Alert.alert('다씀으로 기록하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
     }
-  };
+  });
   const changeQuantity = async (delta: number) => {
-    if (quantitySaving) return;
+    if (busy) return;
     const next = (p.quantity ?? 1) + delta;
     if (next < 1) {
       Alert.alert('수량을 모두 사용했나요?', '수량이 0개가 되면 다 쓴 제품으로 기록할 수 있어요.', [
@@ -46,18 +48,20 @@ function DetailScreen() {
       ]);
       return;
     }
-    setQuantitySaving(true);
-    try {
-      await setProductQuantity(p.id, next);
-      toast('수량을 ' + next + '개로 변경했어요');
-    } catch (error) {
-      Alert.alert('수량을 변경하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
-    } finally {
-      setQuantitySaving(false);
-    }
+    await run(async () => {
+      setQuantitySaving(true);
+      try {
+        await setProductQuantity(p.id, next);
+        toast('수량을 ' + next + '개로 변경했어요');
+      } catch (error) {
+        Alert.alert('수량을 변경하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+      } finally {
+        setQuantitySaving(false);
+      }
+    });
   };
   // 프로토타입 onDelete: 내 물품 탭으로 이동 + 토스트
-  const onDelete = async () => {
+  const onDelete = () => run(async () => {
     try {
       await deleteProduct(p.id);
       setConfirm(false);
@@ -66,15 +70,15 @@ function DetailScreen() {
     } catch (error) {
       Alert.alert('제품을 삭제하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
     }
-  };
-  const onOpenToday = async () => {
+  });
+  const onOpenToday = () => run(async () => {
     try {
       await openToday(p.id);
       toast('개봉일을 기록했어요');
     } catch (error) {
       Alert.alert('개봉일을 저장하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
     }
-  };
+  });
   const onEdit = () => { setMenu(false); router.push({ pathname: '/recognized', params: { edit: p.id } }); };
 
   return (
@@ -122,7 +126,7 @@ function DetailScreen() {
         </View>
         {['영양제', '의약품'].includes(p.cat) && <T style={[tx(13, 19, 400, C.alt), { marginTop: 12 }]}>사용기한은 제품에 표기된 정보를 기준으로 해요.</T>}
       </Scroll>
-      <ActionArea><DButton label="다씀" onPress={onDone} /></ActionArea>
+      <ActionArea><DButton label="다씀" disabled={busy} onPress={onDone} /></ActionArea>
 
       {/* 더보기: 수정 · 삭제 */}
       <BottomSheet visible={menu} onClose={() => setMenu(false)} padded={false}>
@@ -141,7 +145,7 @@ function DetailScreen() {
         <T style={[tx(15, 22, 400, C.alt), { marginTop: 6 }]}>다씀 기록에는 남지 않아요.</T>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 20 }}>
           <View style={{ flex: 1 }}><DButton label="취소" variant="outlined" onPress={() => setConfirm(false)} /></View>
-          <Press onPress={onDelete} radius={12} accessibilityLabel="삭제" style={{ flex: 1, height: 48, backgroundColor: C.red40, alignItems: 'center', justifyContent: 'center' }}>
+          <Press onPress={onDelete} disabled={busy} radius={12} accessibilityLabel="삭제" style={{ flex: 1, height: 48, backgroundColor: C.red40, alignItems: 'center', justifyContent: 'center' }}>
             <T style={tx(16, 24, 600, '#FFFFFF')}>삭제</T>
           </Press>
         </View>

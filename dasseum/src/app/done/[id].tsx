@@ -6,6 +6,7 @@ import { nav, Screen, useToast } from '@/components/shell';
 import { ActionArea, Card, DBadge, DButton, Mascot, Press, ProdImg, T } from '@/components/ui';
 import { TODAY } from '@/data/products';
 import { MissingProduct } from '@/components/missing-product';
+import { useBusy } from '@/hooks/use-busy';
 import { useApp } from '@/store/AppStore';
 import { C, ND, tx } from '@/theme/tokens';
 
@@ -13,6 +14,7 @@ function DoneScreen() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const { product, dones, undoDone } = useApp();
   const toast = useToast();
+  const [busy, run] = useBusy();
   const p = product(id);
   const [snack, setSnack] = useState(true);
   const fade = useRef(new Animated.Value(0)).current;
@@ -24,7 +26,7 @@ function DoneScreen() {
   }, [fade]);
 
   // 프로토타입 onUndo: 기록을 되돌리고 상세 화면으로 복귀
-  const onUndo = async () => {
+  const onUndo = () => run(async () => {
     try {
       await undoDone(p.id);
       router.replace({ pathname: '/product/[id]', params: { id: p.id, ...(from ? { from } : {}) } });
@@ -32,7 +34,7 @@ function DoneScreen() {
     } catch (error) {
       Alert.alert('기록을 되돌리지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
     }
-  };
+  });
   // 프로토타입 onConfirm: 확인 결과에서 들어왔으면 내 물품 탭으로, 아니면 이전 목록으로
   const onConfirm = () => (from === 'result' ? nav.reset('/items') : nav.back());
 
@@ -59,7 +61,7 @@ function DoneScreen() {
         {snack && (
           <Animated.View style={{ opacity: fade, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingLeft: 16, paddingRight: 12, borderRadius: 12, backgroundColor: '#2E2F33', marginBottom: 4 }}>
             <T style={[tx(14, 20, 500, '#FFFFFF'), { flex: 1 }]}>다 쓴 제품으로 기록했어요</T>
-            <Press onPress={onUndo} radius={8} accessibilityLabel="되돌리기" style={{ paddingVertical: 6, paddingHorizontal: 8 }}>
+            <Press onPress={onUndo} disabled={busy} radius={8} accessibilityLabel="되돌리기" style={{ paddingVertical: 6, paddingHorizontal: 8 }}>
               <T style={tx(14, 20, 700, C.mint)}>되돌리기</T>
             </Press>
           </Animated.View>
