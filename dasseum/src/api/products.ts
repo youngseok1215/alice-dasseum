@@ -17,6 +17,17 @@ export type CreateProductInput = {
   imageUri?: string;
 };
 
+export type ActivityRecord = {
+  id: string;
+  type: 'hold' | 'done';
+  productId?: string;
+  name: string;
+  category?: Category;
+  match?: 'same' | 'similar';
+  query?: string;
+  createdAt: string;
+};
+
 export type PurchaseAnalysis = {
   query: string;
   verdict: 'same' | 'similar' | 'none';
@@ -38,6 +49,8 @@ type StoredProduct = {
   expiresAt?: string;
   imageUri?: string;
   createdAt: string;
+  status: 'owned' | 'done';
+  completedAt?: string;
 };
 
 let pendingPhoto: string | undefined;
@@ -67,6 +80,9 @@ function toProduct(product: StoredProduct): Product {
     dday: calculateDday(product.expiresAt),
     registered: dotted(product.createdAt.slice(0, 10)) || '',
     imageUri: product.imageUri?.startsWith('/') ? `${baseUrl}${product.imageUri}` : product.imageUri,
+    quantity: product.quantity,
+    status: product.status,
+    completedAt: product.completedAt,
   };
 }
 
@@ -196,4 +212,50 @@ export async function deleteProduct(id: string) {
   });
   const payload: { deleted?: boolean; error?: string } = await response.json().catch(() => ({}));
   if (!response.ok || !payload.deleted) throw new Error(payload.error || '제품을 삭제하지 못했어요.');
+}
+
+export async function listRecords() {
+  const response = await fetch(`${apiBaseUrl()}/api/records`).catch(() => {
+    throw new Error('활동 기록 서버에 연결할 수 없어요.');
+  });
+  const payload: { records?: ActivityRecord[]; error?: string } = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.records) throw new Error(payload.error || '활동 기록을 불러오지 못했어요.');
+  return payload.records;
+}
+
+export async function markProductDone(id: string) {
+  const response = await fetch(`${apiBaseUrl()}/api/products/${encodeURIComponent(id)}/done`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  }).catch(() => {
+    throw new Error('다씀 기록 서버에 연결할 수 없어요.');
+  });
+  const payload: { product?: StoredProduct; records?: ActivityRecord[]; error?: string } = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.product || !payload.records) throw new Error(payload.error || '다씀으로 기록하지 못했어요.');
+  return { product: toProduct(payload.product), records: payload.records };
+}
+
+export async function undoProductDone(id: string) {
+  const response = await fetch(`${apiBaseUrl()}/api/products/${encodeURIComponent(id)}/done`, {
+    method: 'DELETE',
+  }).catch(() => {
+    throw new Error('다씀 기록 서버에 연결할 수 없어요.');
+  });
+  const payload: { product?: StoredProduct; records?: ActivityRecord[]; error?: string } = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.product || !payload.records) throw new Error(payload.error || '다씀 기록을 되돌리지 못했어요.');
+  return { product: toProduct(payload.product), records: payload.records };
+}
+
+export async function createHold(input: { productId: string; query: string; verdict: 'same' | 'similar' }) {
+  const response = await fetch(`${apiBaseUrl()}/api/holds`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  }).catch(() => {
+    throw new Error('구매 보류 기록 서버에 연결할 수 없어요.');
+  });
+  const payload: { records?: ActivityRecord[]; error?: string } = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.records) throw new Error(payload.error || '구매 보류를 기록하지 못했어요.');
+  return payload.records;
 }
