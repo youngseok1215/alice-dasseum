@@ -1,12 +1,14 @@
+import { fetchWithRetry, isTimeout } from './http-util.mjs';
+
 export async function recognizeProduct(image, categories) {
   if (typeof image !== 'string' || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(image)) {
-    return { status: 400, result: { error: 'Expected a JPEG, PNG, or WebP image as a base64 data URL' } };
+    return { status: 400, result: { error: 'JPEG, PNG, WebP 사진만 인식할 수 있어요.' } };
   }
 
   const { ELICE_VISION_ENDPOINT, ELICE_VISION_MODEL, ELICE_VISION_API_KEY } = process.env;
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
   if (!geminiKey && (!ELICE_VISION_ENDPOINT || !ELICE_VISION_MODEL || !ELICE_VISION_API_KEY)) {
-    return { status: 503, result: { error: 'Photo recognition is not configured' } };
+    return { status: 503, result: { error: '서버에 AI 인식 키가 설정되지 않았어요.' } };
   }
 
   try {
@@ -14,7 +16,6 @@ export async function recognizeProduct(image, categories) {
     const options = {
       method: 'POST',
       redirect: 'error',
-      signal: AbortSignal.timeout(25_000),
       headers: { 'Content-Type': 'application/json' },
     };
 
@@ -45,7 +46,7 @@ export async function recognizeProduct(image, categories) {
     }
 
     const provider = geminiKey ? 'Gemini' : 'Elice';
-    const response = await fetch(endpoint, options);
+    const response = await fetchWithRetry(endpoint, options, { timeoutMs: 20_000, retries: 1, label: `photo recognition ${provider}` });
     if (!response.ok) {
       const failure = geminiKey ? await response.json().catch(() => null) : null;
       const reason = failure?.error?.details?.find(detail =>
@@ -55,7 +56,7 @@ export async function recognizeProduct(image, categories) {
         /^[A-Z_]+$/.test(reason) ? reason : '');
     }
     if (geminiKey && response.status === 429) {
-      return { status: 429, result: { error: 'Gemini request limit reached. Try again later.' } };
+      return { status: 429, result: { error: 'AI 요청 한도에 도달했어요. 잠시 후 다시 시도해 주세요.' } };
     }
     if (!response.ok) throw new Error('Vision provider request failed');
     const data = await response.json();
@@ -90,6 +91,7 @@ export async function recognizeProduct(image, categories) {
   } catch (error) {
     const failure = error instanceof SyntaxError ? 'Invalid JSON' : error.name;
     console.warn('[photo recognition] Processing failed:', failure);
-    return { status: 502, result: { error: 'Photo recognition provider did not return a usable result' } };
+    if (isTimeout(error)) return { status: 504, result: { error: 'AI 인식 응답이 늦어요. 잠시 후 다시 시도해 주세요.' } };
+    return { status: 502, result: { error: '사진에서 제품 정보를 읽지 못했어요. 다시 촬영하거나 직접 입력해 주세요.' } };
   }
 }

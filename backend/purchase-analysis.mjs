@@ -1,3 +1,5 @@
+import { fetchWithRetry } from './http-util.mjs';
+
 const embeddingModel = 'gemini-embedding-001';
 const adviceModel = 'gemini-3.5-flash-lite';
 const embeddingCache = new Map();
@@ -35,7 +37,7 @@ function cosine(left, right) {
 }
 
 async function embedText(text, apiKey) {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/${embeddingModel}:embedContent`,
     {
       method: 'POST',
@@ -46,8 +48,8 @@ async function embedText(text, apiKey) {
         taskType: 'SEMANTIC_SIMILARITY',
         outputDimensionality: 768,
       }),
-      signal: AbortSignal.timeout(15_000),
     },
+    { timeoutMs: 10_000, retries: 1, label: 'Gemini embedding' },
   );
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !Array.isArray(payload.embedding?.values)) {
@@ -117,7 +119,7 @@ decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약
       const endpoint = new URL(ELICE_VISION_ENDPOINT);
       if (endpoint.protocol !== 'https:') throw new Error('Expected an HTTPS endpoint');
       provider = 'Elice';
-      response = await fetch(endpoint, {
+      response = await fetchWithRetry(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ELICE_VISION_API_KEY}` },
         body: JSON.stringify({
@@ -126,11 +128,10 @@ decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약
           reasoning_effort: 'low',
           messages: [{ role: 'user', content: prompt }],
         }),
-        signal: AbortSignal.timeout(20_000),
-      });
+      }, { timeoutMs: 12_000, retries: 1, label: 'purchase advice Elice' });
     } else if (process.env.GEMINI_API_KEY?.trim()) {
       provider = 'Gemini';
-      response = await fetch(
+      response = await fetchWithRetry(
         `https://generativelanguage.googleapis.com/v1beta/models/${adviceModel}:generateContent`,
         {
           method: 'POST',
@@ -139,8 +140,8 @@ decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { maxOutputTokens: 700, responseMimeType: 'application/json' },
           }),
-          signal: AbortSignal.timeout(20_000),
         },
+        { timeoutMs: 12_000, retries: 1, label: 'purchase advice Gemini' },
       );
     } else {
       return { ...fallback, provider: 'rules' };
@@ -159,10 +160,10 @@ decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약
 
 export async function analyzePurchase(query, purpose, products) {
   if (typeof query !== 'string' || !query.trim() || query.trim().length > 200) {
-    return { status: 400, result: { error: 'query must contain 1 to 200 characters' } };
+    return { status: 400, result: { error: '검색어는 1~200자로 입력해 주세요.' } };
   }
   if (purpose !== undefined && (typeof purpose !== 'string' || purpose.trim().length > 200)) {
-    return { status: 400, result: { error: 'purpose is invalid' } };
+    return { status: 400, result: { error: '구매 목적을 200자 이내로 입력해 주세요.' } };
   }
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
