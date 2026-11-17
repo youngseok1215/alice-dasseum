@@ -22,6 +22,7 @@ API 키는 **백엔드 환경변수에만** 둡니다. 앱 번들에는 `EXPO_PU
 | `DASSEM_HOST` | 선택 | 외부 접속은 `0.0.0.0`. 비우면 `127.0.0.1`, 단 `PORT`만 있는 배포 환경에서는 `0.0.0.0` |
 | `DASSEM_PORT` | 선택 | 비우면 `PORT`, 그것도 없으면 `3001` |
 | `DASSEM_DB_PATH` | 배포 시 필수 | SQLite 파일 경로. 사진은 같은 폴더의 `images/`에 저장 |
+| `DASSEM_TIMEZONE` | 선택 | AI 판단 문구의 D-day·개봉 경과 계산 기준 시간대. 기본 `Asia/Seoul` |
 | `DASSEM_CORS_ORIGINS` | 선택 | 웹 빌드 주소(쉼표 구분). 휴대폰 앱은 필요 없음 |
 
 ### 실행 (저장소 루트에서)

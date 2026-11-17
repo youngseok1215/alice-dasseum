@@ -86,6 +86,38 @@ async function cachedEmbedding(text, apiKey, store, stats) {
   }
 }
 
+// 날짜 계산은 LLM이 자주 틀리므로 서버에서 계산해 문장으로 넘깁니다. 기준 날짜는 한국 시간(DASSEM_TIMEZONE)입니다.
+function todayIso() {
+  const timeZone = process.env.DASSEM_TIMEZONE?.trim() || 'Asia/Seoul';
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function daysBetween(fromIso, toIso) {
+  return Math.round((Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / 86_400_000);
+}
+
+/** 보유 제품의 수량·사용기한·개봉 경과를 사람이 읽는 문장 조각으로 계산합니다. */
+export function ownedFacts(product, today = todayIso()) {
+  if (!product) return undefined;
+  const quantity = Number.isSafeInteger(product.quantity) ? `${product.quantity}개` : undefined;
+  let expiry = '사용기한 미입력';
+  if (product.expiresAt) {
+    const left = daysBetween(today, product.expiresAt);
+    expiry = left < 0 ? `사용기한이 ${-left}일 지남` : left === 0 ? '사용기한이 오늘까지' : `사용기한 ${left}일 남음 (D-${left})`;
+  }
+  let opened = '미개봉';
+  if (product.openedAt) {
+    const days = daysBetween(product.openedAt, today);
+    const months = Math.floor(days / 30.44);
+    opened = days < 0 ? '개봉일 확인 필요' : months >= 1 ? `개봉 ${months}개월째` : `개봉 ${days + 1}일째`;
+  }
+  return { quantity, expiry, opened, text: [quantity && `보유 수량 ${quantity}`, expiry, opened].filter(Boolean).join(', ') };
+}
+
 function specSentence(differences) {
   return differences.map(({ unit, owned, query }) => `보유 제품은 ${owned}, 구매 예정 제품은 ${query}로 ${unit} 규격이 달라요.`).join(' ');
 }
@@ -98,20 +130,33 @@ function defaultAdvice(verdict, match, query, differences = []) {
       reason: `내 물품에서 ‘${query}’과 의미가 비슷한 제품을 찾지 못했어요. 구매 전 제품명과 용량을 한 번 더 확인해 주세요.`,
     };
   }
-  const expiry = match.expiresAt ? ` 사용기한은 ${match.expiresAt}이에요.` : '';
+  // AI가 실패해도 계산된 숫자로 구체적인 안내를 만듭니다. 예: ‘비타민C’ 2개를 갖고 있어요(사용기한 30일 남음, 미개봉).
+  const facts = ownedFacts(match);
+  const holding = `‘${match.name}’${facts.quantity ? ` ${facts.quantity}` : ''}를 갖고 있어요 (${[facts.expiry, facts.opened].join(', ')}).`;
   if (verdict === 'similar' && differences.length) {
     return {
       decision: 'CHECK_FIRST',
       title: '용량·규격만 다른 제품을 가지고 있어요',
-      reason: `‘${match.name}’을 보유하고 있어요. ${specSentence(differences)}${expiry} 지금 가진 제품으로 충분한지 확인한 뒤 구매를 결정해 주세요.`,
+      reason: `${holding} ${specSentence(differences)} 지금 가진 제품으로 충분한지 확인한 뒤 구매를 결정해 주세요.`,
     };
   }
   return {
     decision: verdict === 'same' ? 'HOLD' : 'CHECK_FIRST',
     title: verdict === 'same' ? '같은 제품을 이미 가지고 있어요' : '비슷한 제품을 가지고 있어요',
-    reason: `‘${match.name}’을 보유하고 있어요.${expiry} 남은 수량과 용도를 확인한 뒤 구매를 결정해 주세요.`,
+    reason: `${holding} ${verdict === 'same' ? '가진 제품을 먼저 쓴 뒤 구매해 보세요.' : '어떻게 다른지, 지금 가진 걸로 충분한지 확인한 뒤 구매를 결정해 주세요.'}`,
   };
 }
+
+// Gemini Structured Output (generationConfig.responseJsonSchema, 표준 JSON Schema)
+export const adviceSchema = {
+  type: 'object',
+  properties: {
+    decision: { type: 'string', enum: ['BUY', 'CHECK_FIRST', 'HOLD'] },
+    title: { type: 'string', description: '한 줄 제목 (30자 이내)' },
+    reason: { type: 'string', description: '두세 문장 근거, 보유 수량·남은 기간 숫자 포함' },
+  },
+  required: ['decision', 'title', 'reason'],
+};
 
 function parseAdvice(content) {
   if (typeof content !== 'string') return undefined;
@@ -133,10 +178,11 @@ async function generateAdvice({ query, purpose, verdict, match, similarity, diff
 구매 목적: ${purpose || '입력하지 않음'}
 판정: ${verdict}
 유사도: ${similarity ?? 0}
-보유 제품: ${match ? JSON.stringify({ name: match.name, brand: match.brand, category: match.category, quantity: match.quantity, openedAt: match.openedAt, expiresAt: match.expiresAt }) : '없음'}
+보유 제품: ${match ? JSON.stringify({ name: match.name, brand: match.brand, category: match.category }) : '없음'}
+보유 제품 상태(서버 계산, 그대로 사용): ${match ? ownedFacts(match).text : '없음'}
 규격 차이: ${differences.length ? specSentence(differences) : '없음'}
 
-decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약품은 효능, 복용량, 대체 가능 여부를 판단하지 말고 제품명·보유 수량·사용기한 확인만 권하세요. JSON 이외의 문장은 출력하지 마세요.
+decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. reason에는 위 '보유 제품 상태'의 수량·남은 기간 숫자를 그대로 인용하고, 날짜를 직접 계산하지 마세요. 영양제·의약품은 효능, 복용량, 대체 가능 여부를 판단하지 말고 제품명·보유 수량·사용기한 확인만 권하세요. JSON 이외의 문장은 출력하지 마세요.
 {"decision":"CHECK_FIRST","title":"한 줄 제목","reason":"두세 문장 근거"}`;
 
   const { ELICE_VISION_ENDPOINT, ELICE_VISION_MODEL, ELICE_VISION_API_KEY } = process.env;
@@ -159,18 +205,29 @@ decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. 영양제·의약
       }, { timeoutMs: 12_000, retries: 1, label: 'purchase advice Elice' });
     } else if (process.env.GEMINI_API_KEY?.trim()) {
       provider = 'Gemini';
-      response = await fetchWithRetry(
+      const requestAdvice = (withSchema) => fetchWithRetry(
         `${geminiBaseUrl()}/v1beta/models/${adviceModel}:generateContent`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY.trim() },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 700, responseMimeType: 'application/json' },
+            // Structured Output: decision을 세 값 중 하나로 강제
+            generationConfig: {
+              maxOutputTokens: 700,
+              responseMimeType: 'application/json',
+              ...(withSchema ? { responseJsonSchema: adviceSchema } : {}),
+            },
           }),
         },
-        { timeoutMs: 12_000, retries: 1, label: 'purchase advice Gemini' },
+        { timeoutMs: 12_000, retries: withSchema ? 1 : 0, label: 'purchase advice Gemini' },
       );
+      response = await requestAdvice(true);
+      if (response.status === 400) {
+        // 모델이 스키마를 받아들이지 않으면 스키마 없이 한 번만 다시 요청
+        console.warn('[purchase analysis] Gemini 400 with responseJsonSchema, retrying without schema');
+        response = await requestAdvice(false);
+      }
     } else {
       return { ...fallback, provider: 'rules' };
     }
