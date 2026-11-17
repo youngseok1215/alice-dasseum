@@ -2,7 +2,7 @@
 // 모든 테스트는 임시 폴더의 새 DB를 사용합니다. 실제 backend/.data DB는 건드리지 않습니다.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -229,6 +229,33 @@ describe('사진 저장·정리', () => {
       assert.ok(!existsSync(join(imageDir, first.split('/').pop())), '사진을 바꾸면 이전 사진 삭제');
       assert.ok(existsSync(join(imageDir, second.split('/').pop())));
       assert.equal(readdirSync(imageDir).length, 1);
+    } finally { await server.stop(); }
+  });
+
+  test('24시간 넘게 어떤 제품에도 연결되지 않은 사진만 시작 시 정리', async () => {
+    const { dbPath, imageDir } = tempDb();
+    let server = await startServer(dbPath);
+    let kept;
+    try {
+      kept = (await server.api('POST', '/api/products/images', { image: `data:image/png;base64,${PNG}` })).json.imageUri.split('/').pop();
+      await server.api('POST', '/api/products', { name: '사진 있는 제품', category: '화장품', imageUri: `/api/images/${kept}` });
+    } finally { await server.stop(); }
+    mkdirSync(imageDir, { recursive: true });
+    const png = Buffer.from(PNG, 'base64');
+    const oldOrphan = '11111111-2222-3333-4444-555555555555.png';
+    const newOrphan = '66666666-7777-8888-9999-000000000000.png';
+    writeFileSync(join(imageDir, oldOrphan), png);
+    writeFileSync(join(imageDir, newOrphan), png);
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+    utimesSync(join(imageDir, oldOrphan), twoDaysAgo, twoDaysAgo);
+    utimesSync(join(imageDir, kept), twoDaysAgo, twoDaysAgo);
+
+    server = await startServer(dbPath);
+    try {
+      assert.match(server.log(), /연결되지 않은 사진 1개 정리/);
+      assert.ok(!existsSync(join(imageDir, oldOrphan)), '오래된 미연결 사진 삭제');
+      assert.ok(existsSync(join(imageDir, newOrphan)), '방금 올린 사진은 등록 중일 수 있어 유지');
+      assert.ok(existsSync(join(imageDir, kept)), '제품이 쓰는 사진은 오래돼도 유지');
     } finally { await server.stop(); }
   });
 

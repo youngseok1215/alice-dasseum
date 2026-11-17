@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -110,6 +110,29 @@ function localImageFile(imageUri) {
 }
 
 /** 어떤 제품도 더 이상 참조하지 않는 로컬 사진만 지웁니다. 다른 제품이 같은 사진을 쓰면 남깁니다. */
+/**
+ * 업로드는 됐지만 제품 등록이 실패해 어떤 제품에도 연결되지 않은 사진을 정리합니다.
+ * 업로드 직후 등록 요청이 이어지므로, 24시간 넘게 참조가 없는 파일만 지웁니다.
+ */
+function removeOrphanImages(minAgeMs = 24 * 60 * 60 * 1000) {
+  const referenced = new Set(database.prepare('SELECT imageUri FROM products WHERE imageUri IS NOT NULL').all()
+    .map((row) => localImageFile(row.imageUri)).filter(Boolean));
+  let removed = 0;
+  for (const file of readdirSync(imageDirectory)) {
+    if (!/^[0-9a-f-]+\.(?:jpg|jpeg|png|webp)$/i.test(file) || referenced.has(file)) continue;
+    const path = resolve(imageDirectory, file);
+    try {
+      if (Date.now() - statSync(path).mtimeMs < minAgeMs) continue;
+      unlinkSync(path);
+      removed += 1;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') console.warn('[images] 정리 실패:', file, error?.code ?? error?.name);
+    }
+  }
+  if (removed) console.log(`[images] 제품에 연결되지 않은 사진 ${removed}개 정리`);
+  return removed;
+}
+
 function removeImageIfUnused(imageUri) {
   const file = localImageFile(imageUri);
   if (!file) return;
@@ -607,6 +630,9 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
   process.exit(1);
 }
 logConfig();
+removeOrphanImages();
+// 서버가 오래 켜져 있어도 하루 두 번 정리 (unref: 이 타이머 때문에 종료가 늦어지지 않게)
+setInterval(() => removeOrphanImages(), 12 * 60 * 60 * 1000).unref();
 server.listen(port, host, () => {
   console.log(`Products API listening on ${host}:${server.address().port}`);
   if (host === '127.0.0.1') console.log('[config] 이 컴퓨터에서만 접속할 수 있어요. 휴대폰·외부 접속은 DASSEM_HOST=0.0.0.0 으로 실행하세요.');
