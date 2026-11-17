@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { Alert, View } from 'react-native';
 import {
+  analyzePurchase,
   getPendingExpiryPhoto,
   getPendingPhoto,
   getPendingSuggestion,
@@ -19,8 +20,18 @@ export default function Analyzing() {
 
   useEffect(() => {
     if (mode === 'search') {
-      const timer = setTimeout(() => router.replace({ pathname: '/result', params: { mode, q } }), 900);
-      return () => clearTimeout(timer);
+      const controller = new AbortController();
+      analyzePurchase(q, undefined, controller.signal)
+        .then(() => router.replace({ pathname: '/result', params: { mode, q } }))
+        .catch((error) => {
+          if (controller.signal.aborted) return;
+          Alert.alert(
+            'AI 유사도 분석을 사용할 수 없어요',
+            error instanceof Error ? error.message : '기본 비교 결과를 보여드릴게요.',
+          );
+          router.replace({ pathname: '/result', params: { mode, q } });
+        });
+      return () => controller.abort();
     }
 
     const photo = mode === 'register-expiry' ? getPendingExpiryPhoto() : getPendingPhoto();
@@ -51,6 +62,14 @@ export default function Analyzing() {
         }
         await refreshProducts().catch(() => {});
         const query = [suggestion.brand, suggestion.name].filter(Boolean).join(' ');
+        await analyzePurchase(query, undefined, controller.signal).catch((error) => {
+          if (!controller.signal.aborted) {
+            Alert.alert(
+              'AI 유사도 분석을 사용할 수 없어요',
+              error instanceof Error ? error.message : '기본 비교 결과를 보여드릴게요.',
+            );
+          }
+        });
         router.replace({ pathname: '/result', params: { mode: 'photo', q: query, ...(album ? { album } : {}) } });
       })
       .catch((error) => {
