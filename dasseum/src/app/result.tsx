@@ -2,6 +2,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
+import { getPendingPurchaseAnalysis } from '@/api/products';
 import { AiHead } from '@/components/ai';
 import { BottomSheet } from '@/components/overlay';
 import { nav, Screen, Scroll, useToast } from '@/components/shell';
@@ -20,15 +21,19 @@ export default function Result() {
   const toast = useToast();
   const openCamera = useOpenCamera();
   const [ask, setAsk] = useState(false);
-  const r = matchOwnedProducts(q, products().filter((item) => !completed.includes(item.id)));
+  const pendingAnalysis = getPendingPurchaseAnalysis();
+  const aiResult = pendingAnalysis?.query === q ? pendingAnalysis : undefined;
+  const r = aiResult
+    ? { verdict: aiResult.verdict, items: aiResult.matches.map((item) => item.productId) }
+    : matchOwnedProducts(q, products().filter((item) => !completed.includes(item.id)));
 
   const V = {
     same: {
       badge: <View style={{ height: 22, justifyContent: 'center' }}><T style={{ fontSize: 12, lineHeight: 16, fontFamily: FONT[600], letterSpacing: 0.24, color: C.red40 }}>동일 제품 있음</T></View>,
-      title: '이미 가지고 있어요', sub: `내 물품에 같은 제품이 ${r.items.length}개 있어요.`,
+      title: aiResult?.verdict === 'same' ? aiResult.title : '이미 가지고 있어요', sub: `내 물품에 같은 제품이 ${r.items.length}개 있어요.`,
     },
-    similar: { badge: <DBadge tone="mint">유사 제품 있음</DBadge>, title: '비슷한 제품이 있어요', sub: '같은 종류의 제품을 가지고 있어요. 어떻게 다른지는 AI 비교에서 확인해 보세요.' },
-    none: { badge: <DBadge tone="ok">보유 제품 없음</DBadge>, title: '가지고 있는 제품이 없어요', sub: `내 물품에서 ‘${q}’과 같거나 비슷한 제품을 찾지 못했어요.` },
+    similar: { badge: <DBadge tone="mint">유사 제품 있음</DBadge>, title: aiResult?.title ?? '비슷한 제품이 있어요', sub: '같은 종류의 제품을 가지고 있어요. 어떻게 다른지는 AI 비교에서 확인해 보세요.' },
+    none: { badge: <DBadge tone="ok">보유 제품 없음</DBadge>, title: aiResult?.title ?? '가지고 있는 제품이 없어요', sub: `내 물품에서 ‘${q}’과 같거나 비슷한 제품을 찾지 못했어요.` },
   }[r.verdict];
   const isSupp = r.items.some((k) => ['영양제', '의약품'].includes(product(k).cat));
 
