@@ -8,6 +8,7 @@ import { fetchWithRetry } from './http-util.mjs';
 import { recognizeProduct } from './product-vision.mjs';
 import { createEmbeddingStore } from './embedding-store.mjs';
 import { analyzePurchase, embeddingDimensions, embeddingModel } from './purchase-analysis.mjs';
+import { createRateLimiter, envLimit } from './rate-limit.mjs';
 import { downloadImage, DownloadError, sniffImageType } from './safe-download.mjs';
 
 const categories = ['화장품', '영양제', '의약품', '생활용품'];
@@ -70,35 +71,67 @@ database.exec(`
   ) STRICT
 `);
 if (!hadActivityTable && databaseExisted) console.log('[db] 마이그레이션: activity_records 테이블 생성 (다씀·구매 보류 기록)');
-console.log(`[db] 제품 ${database.prepare('SELECT COUNT(*) AS n FROM products').get().n}개, 기록 ${database.prepare('SELECT COUNT(*) AS n FROM activity_records').get().n}개`);
+
+// ── 사용자 구분 (로그인 없이 이름 + 서버가 발급한 무작위 ID) ─────────────────
+// 기존 데이터(userId 없음)는 지우지 않고 어떤 사용자에게도 보이지 않게 보관합니다.
+const hadUsersTable = Boolean(database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get());
+database.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    lastSeenAt TEXT NOT NULL
+  ) STRICT
+`);
+if (!hadUsersTable && databaseExisted) console.log('[db] 마이그레이션: users 테이블 생성');
+for (const table of ['products', 'activity_records']) {
+  const columns = new Set(database.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+  if (!columns.has('userId')) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN userId TEXT`);
+    if (databaseExisted) console.log(`[db] 마이그레이션: ${table} 테이블에 userId 열 추가 (기존 데이터 유지)`);
+  }
+}
+database.exec('CREATE INDEX IF NOT EXISTS products_user ON products (userId, createdAt)');
+database.exec('CREATE INDEX IF NOT EXISTS records_user ON activity_records (userId, createdAt)');
+const legacyProducts = database.prepare('SELECT COUNT(*) AS n FROM products WHERE userId IS NULL').get().n;
+const legacyRecords = database.prepare('SELECT COUNT(*) AS n FROM activity_records WHERE userId IS NULL').get().n;
+if (legacyProducts || legacyRecords) {
+  console.log(`[db] 사용자 구분 이전 데이터: 제품 ${legacyProducts}개, 기록 ${legacyRecords}개 — 삭제하지 않고 숨겨서 보관`);
+}
+console.log(`[db] 사용자 ${database.prepare('SELECT COUNT(*) AS n FROM users').get().n}명, 제품 ${database.prepare('SELECT COUNT(*) AS n FROM products').get().n}개, 기록 ${database.prepare('SELECT COUNT(*) AS n FROM activity_records').get().n}개`);
 
 const embeddingStore = createEmbeddingStore(database, { model: embeddingModel, dimensions: embeddingDimensions });
 const prunedEmbeddings = embeddingStore.pruneOlderThan(90);
 console.log(`[db] 임베딩 캐시 ${embeddingStore.size()}개${prunedEmbeddings ? ` (오래된 ${prunedEmbeddings}개 정리)` : ''}`);
 
 const insert = database.prepare(`
-  INSERT INTO products (id, name, brand, category, quantity, openedAt, expiresAt, imageUri, memo, createdAt)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO products (id, name, brand, category, quantity, openedAt, expiresAt, imageUri, memo, createdAt, userId)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
-const list = database.prepare('SELECT * FROM products ORDER BY createdAt DESC, rowid DESC');
-const findById = database.prepare('SELECT * FROM products WHERE id = ?');
+// 모든 조회·수정은 요청한 사용자의 데이터로만 제한합니다.
+const list = database.prepare('SELECT * FROM products WHERE userId = ? ORDER BY createdAt DESC, rowid DESC');
+const findOwnedProduct = database.prepare('SELECT * FROM products WHERE id = ? AND userId = ?');
 const update = database.prepare(`
   UPDATE products
   SET name = ?, brand = ?, category = ?, quantity = ?, openedAt = ?, expiresAt = ?, imageUri = ?, memo = ?
   WHERE id = ?
 `);
 const remove = database.prepare('DELETE FROM products WHERE id = ?');
-const listOwned = database.prepare("SELECT * FROM products WHERE status = 'owned' ORDER BY createdAt DESC, rowid DESC");
+const listOwned = database.prepare("SELECT * FROM products WHERE status = 'owned' AND userId = ? ORDER BY createdAt DESC, rowid DESC");
 const setProductStatus = database.prepare('UPDATE products SET status = ?, completedAt = ? WHERE id = ?');
-const listRecords = database.prepare('SELECT * FROM activity_records ORDER BY createdAt DESC, rowid DESC');
+const listRecords = database.prepare('SELECT * FROM activity_records WHERE userId = ? ORDER BY createdAt DESC, rowid DESC');
 const insertRecord = database.prepare(`
-  INSERT INTO activity_records (id, type, productId, name, category, match, query, createdAt)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO activity_records (id, type, productId, name, category, match, query, createdAt, userId)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const removeDoneRecords = database.prepare("DELETE FROM activity_records WHERE type = 'done' AND productId = ?");
 // 제품을 지워도 다씀·구매 보류 기록(이름·카테고리 스냅샷)은 남기고 제품 연결만 끊습니다.
 const detachProductRecords = database.prepare('UPDATE activity_records SET productId = NULL WHERE productId = ?');
-const removeAllRecords = database.prepare('DELETE FROM activity_records');
+const removeAllRecords = database.prepare('DELETE FROM activity_records WHERE userId = ?');
+const insertUser = database.prepare('INSERT INTO users (id, name, createdAt, lastSeenAt) VALUES (?, ?, ?, ?)');
+const findUser = database.prepare('SELECT * FROM users WHERE id = ?');
+const renameUser = database.prepare('UPDATE users SET name = ? WHERE id = ?');
+const touchUser = database.prepare('UPDATE users SET lastSeenAt = ? WHERE id = ?');
 const countImageReferences = database.prepare(
   "SELECT COUNT(*) AS n FROM products WHERE imageUri = ? OR imageUri LIKE '%' || ?",
 );
@@ -173,7 +206,7 @@ function sendImage(response, path) {
   response.end(readFileSync(path));
 }
 
-function publicProduct({ openedAt, expiresAt, completedAt, brand, imageUri, memo, ...product }) {
+function publicProduct({ openedAt, expiresAt, completedAt, brand, imageUri, memo, userId: _userId, ...product }) {
   return {
     ...product,
     openedAt: openedAt ?? undefined,
@@ -185,7 +218,17 @@ function publicProduct({ openedAt, expiresAt, completedAt, brand, imageUri, memo
   };
 }
 
-function publicRecord({ category, match, query, productId, ...record }) {
+function publicUser({ id, name }) {
+  return { id, name };
+}
+
+function userName(value) {
+  const name = typeof value === 'string' ? value.normalize('NFC').trim().replace(/\s+/g, ' ') : '';
+  if (name.length < 1 || name.length > 20) throw new Error('이름은 1~20자로 입력해 주세요.');
+  return name;
+}
+
+function publicRecord({ category, match, query, productId, userId: _userId, ...record }) {
   return {
     ...record,
     productId: productId ?? undefined,
@@ -435,6 +478,54 @@ function sendHealth(response) {
   });
 }
 
+// ── 사용자 확인 · 요청 제한 ─────────────────────────────────
+const USER_HEADER = 'x-dasseum-user';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const trustProxy = process.env.DASSEM_TRUST_PROXY === '1';
+const tenMinutes = 10 * 60 * 1000;
+const limits = {
+  // AI 호출(사진 인식·구매 분석·사진 검색): 사용자별 10분에 30회, IP별 10분에 120회 — Gemini 사용량 보호
+  aiPerUser: createRateLimiter({ windowMs: tenMinutes, max: envLimit('DASSEM_AI_LIMIT_PER_USER', 30) }),
+  aiPerIp: createRateLimiter({ windowMs: tenMinutes, max: envLimit('DASSEM_AI_LIMIT_PER_IP', 120) }),
+  // 사진 업로드·외부 사진 저장: 사용자별 10분에 60회
+  uploadPerUser: createRateLimiter({ windowMs: tenMinutes, max: 60 }),
+  // 사용자 생성: IP별 1시간에 20명 (같은 와이파이의 여러 기기는 허용, 대량 생성은 차단)
+  signupPerIp: createRateLimiter({ windowMs: 60 * 60 * 1000, max: envLimit('DASSEM_SIGNUP_LIMIT_PER_IP', 20) }),
+};
+
+function clientIp(request) {
+  // Render·Railway 같은 프록시 뒤라면 DASSEM_TRUST_PROXY=1 로 실제 접속 IP(X-Forwarded-For)를 씁니다.
+  const forwarded = trustProxy ? request.headers['x-forwarded-for']?.split(',')[0]?.trim() : undefined;
+  return forwarded || request.socket.remoteAddress || 'unknown';
+}
+
+/** 제한에 걸리면 429를 보내고 false. 여러 제한을 모두 통과해야 true */
+function allow(response, checks) {
+  for (const [limiter, key] of checks) {
+    const result = limiter.hit(key);
+    if (!result.ok) {
+      response.setHeader('Retry-After', String(result.retryAfterSeconds));
+      const wait = result.retryAfterSeconds >= 60 ? `${Math.ceil(result.retryAfterSeconds / 60)}분` : `${result.retryAfterSeconds}초`;
+      send(response, 429, { error: `요청이 너무 많아요. ${wait} 후 다시 시도해 주세요.`, code: 'RATE_LIMITED' });
+      return false;
+    }
+  }
+  return true;
+}
+
+/** X-Dasseum-User 헤더의 사용자를 찾습니다. 없거나 모르는 ID면 401을 보내고 undefined. */
+function requireUser(request, response) {
+  const id = request.headers[USER_HEADER];
+  const user = typeof id === 'string' && UUID_RE.test(id) ? findUser.get(id) : undefined;
+  if (!user) {
+    send(response, 401, { error: '사용자 정보를 찾을 수 없어요. 이름을 다시 등록해 주세요.', code: 'USER_REQUIRED' });
+    return undefined;
+  }
+  const now = new Date();
+  if (!user.lastSeenAt || now.getTime() - Date.parse(user.lastSeenAt) > 60 * 60 * 1000) touchUser.run(now.toISOString(), user.id);
+  return user;
+}
+
 const server = createServer(async (request, response) => {
   // 요청마다 한 줄 로그: 휴대폰 요청이 서버에 도착했는지, 어디서 느린지 바로 확인용 (사진 파일 요청은 제외)
   const started = Date.now();
@@ -450,7 +541,7 @@ const server = createServer(async (request, response) => {
     const imageMatch = /^\/api\/images\/([0-9a-f-]+\.(?:jpg|jpeg|png|webp))$/i.exec(path);
     const doneMatch = /^\/api\/products\/([0-9a-f-]+)\/done$/i.exec(path);
     const productMatch = /^\/api\/products\/([0-9a-f-]+)$/i.exec(path);
-    const knownPath = path === '/api/health' || path === '/api/products' || path === '/api/products/recognize' ||
+    const knownPath = path === '/api/health' || path === '/api/users' || path === '/api/users/me' || path === '/api/products' || path === '/api/products/recognize' ||
       path === '/api/purchase-analysis' || path === '/api/records' || path === '/api/holds' ||
       path === '/api/products/images' || path === '/api/products/images/search' ||
       imageMatch || doneMatch || productMatch;
@@ -468,7 +559,7 @@ const server = createServer(async (request, response) => {
     if (request.method === 'OPTIONS') {
       response.writeHead(204, {
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Dasseum-User',
       });
       return response.end();
     }
@@ -476,36 +567,60 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && path === '/api/health') {
       return sendHealth(response);
     }
+    // 사진 파일은 무작위 파일 이름이라 인증 없이 제공합니다 (expo-image가 헤더 없이 불러옴).
     if (request.method === 'GET' && imageMatch) {
       return sendImage(response, resolve(imageDirectory, imageMatch[1]));
     }
+
+    // 처음 실행: 이름으로 사용자 만들기 → 앱이 받은 id를 저장하고 모든 요청에 X-Dasseum-User 헤더로 보냄
+    if (request.method === 'POST' && path === '/api/users') {
+      if (!allow(response, [[limits.signupPerIp, clientIp(request)]])) return;
+      const body = await readJson(request, response, 4_096);
+      if (body === undefined) return;
+      let name;
+      try { name = userName(body?.name); } catch (error) { return send(response, 400, { error: error.message }); }
+      const now = new Date().toISOString();
+      const id = randomUUID();
+      insertUser.run(id, name, now, now);
+      console.log(`[users] 새 사용자: ${name}`);
+      return send(response, 201, { user: publicUser({ id, name }) });
+    }
+
+    const user = requireUser(request, response);
+    if (!user) return;
+    const userId = user.id;
+    const ip = clientIp(request);
+
+    if (request.method === 'GET' && path === '/api/users/me') {
+      return send(response, 200, { user: publicUser(user) });
+    }
     if (request.method === 'GET' && path === '/api/products') {
-      const products = list.all().map(publicProduct);
+      const products = list.all(userId).map(publicProduct);
       return send(response, 200, { products });
     }
     if (request.method === 'GET' && path === '/api/records') {
-      return send(response, 200, { records: listRecords.all().map(publicRecord) });
+      return send(response, 200, { records: listRecords.all(userId).map(publicRecord) });
     }
     // 설정 > '모든 데이터 초기화' 전용. 제품 삭제만으로는 기록이 남기 때문에 따로 지웁니다.
     if (request.method === 'DELETE' && path === '/api/records') {
-      const { changes } = removeAllRecords.run();
-      console.log(`[records] 활동 기록 ${changes}개 삭제 (모든 데이터 초기화)`);
+      const { changes } = removeAllRecords.run(userId);
+      console.log(`[records] 활동 기록 ${changes}개 삭제 (모든 데이터 초기화, ${user.name})`);
       return send(response, 200, { deleted: Number(changes) });
     }
     if (request.method === 'DELETE' && doneMatch) {
-      const existing = findById.get(doneMatch[1]);
+      const existing = findOwnedProduct.get(doneMatch[1], userId);
       if (!existing) return send(response, 404, { error: '제품을 찾을 수 없어요. 이미 삭제됐을 수 있어요.' });
       transaction(() => {
         setProductStatus.run('owned', null, doneMatch[1]);
         removeDoneRecords.run(doneMatch[1]);
       });
       return send(response, 200, {
-        product: publicProduct(findById.get(doneMatch[1])),
-        records: listRecords.all().map(publicRecord),
+        product: publicProduct(findOwnedProduct.get(doneMatch[1], userId)),
+        records: listRecords.all(userId).map(publicRecord),
       });
     }
     if (request.method === 'DELETE' && productMatch) {
-      const existing = findById.get(productMatch[1]);
+      const existing = findOwnedProduct.get(productMatch[1], userId);
       if (!existing) return send(response, 404, { error: '제품을 찾을 수 없어요. 이미 삭제됐을 수 있어요.' });
       transaction(() => {
         detachProductRecords.run(productMatch[1]);
@@ -525,23 +640,23 @@ const server = createServer(async (request, response) => {
     if (body === undefined) return;
 
     if (request.method === 'POST' && doneMatch) {
-      const existing = findById.get(doneMatch[1]);
+      const existing = findOwnedProduct.get(doneMatch[1], userId);
       if (!existing) return send(response, 404, { error: '제품을 찾을 수 없어요. 이미 삭제됐을 수 있어요.' });
       const completedAt = new Date().toISOString();
       transaction(() => {
         setProductStatus.run('done', completedAt, doneMatch[1]);
         removeDoneRecords.run(doneMatch[1]);
         insertRecord.run(randomUUID(), 'done', doneMatch[1], existing.name, existing.category,
-          null, null, completedAt);
+          null, null, completedAt, userId);
       });
       return send(response, 200, {
-        product: publicProduct(findById.get(doneMatch[1])),
-        records: listRecords.all().map(publicRecord),
+        product: publicProduct(findOwnedProduct.get(doneMatch[1], userId)),
+        records: listRecords.all(userId).map(publicRecord),
       });
     }
     if (request.method === 'POST' && path === '/api/holds') {
       const productId = typeof body?.productId === 'string' ? body.productId : '';
-      const existing = findById.get(productId);
+      const existing = findOwnedProduct.get(productId, userId);
       if (!existing || existing.status === 'done') {
         return send(response, 404, { error: '보유 중인 제품을 찾을 수 없어요.' });
       }
@@ -551,12 +666,12 @@ const server = createServer(async (request, response) => {
       if (!verdict) return send(response, 400, { error: '판정 값이 올바르지 않아요.' });
       const createdAt = new Date().toISOString();
       insertRecord.run(randomUUID(), 'hold', productId, existing.name, existing.category,
-        verdict, query ?? null, createdAt);
-      return send(response, 201, { records: listRecords.all().map(publicRecord) });
+        verdict, query ?? null, createdAt, userId);
+      return send(response, 201, { records: listRecords.all(userId).map(publicRecord) });
     }
 
     if (request.method === 'PATCH' && productMatch) {
-      const existing = findById.get(productMatch[1]);
+      const existing = findOwnedProduct.get(productMatch[1], userId);
       if (!existing) return send(response, 404, { error: '제품을 찾을 수 없어요. 이미 삭제됐을 수 있어요.' });
       let changed;
       try {
@@ -582,16 +697,26 @@ const server = createServer(async (request, response) => {
       if (existing.imageUri && localImageFile(existing.imageUri) !== localImageFile(changed.imageUri)) {
         removeImageIfUnused(existing.imageUri);
       }
-      return send(response, 200, { product: publicProduct(findById.get(productMatch[1])) });
+      return send(response, 200, { product: publicProduct(findOwnedProduct.get(productMatch[1], userId)) });
+    }
+    if (request.method === 'PATCH' && path === '/api/users/me') {
+      let name;
+      try { name = userName(body?.name); } catch (error) { return send(response, 400, { error: error.message }); }
+      renameUser.run(name, userId);
+      return send(response, 200, { user: publicUser({ id: userId, name }) });
     }
     if (request.method === 'PATCH') return send(response, 404, { error: '요청한 주소를 찾을 수 없어요.' });
+
+    const aiPath = path === '/api/products/recognize' || path === '/api/purchase-analysis' || path === '/api/products/images/search';
+    if (aiPath && !allow(response, [[limits.aiPerUser, userId], [limits.aiPerIp, ip]])) return;
+    if (path === '/api/products/images' && !allow(response, [[limits.uploadPerUser, userId]])) return;
 
     if (path === '/api/products/recognize') {
       const { status, result } = await recognizeProduct(body?.image, categories);
       return send(response, status, result);
     }
     if (path === '/api/purchase-analysis') {
-      const products = listOwned.all().map(publicProduct);
+      const products = listOwned.all(userId).map(publicProduct);
       const { status, result } = await analyzePurchase(body?.query, body?.purpose, products, { embeddingStore });
       return send(response, status, result);
     }
@@ -622,8 +747,8 @@ const server = createServer(async (request, response) => {
     }
     insert.run(product.id, product.name, product.brand ?? null, product.category, product.quantity,
       product.openedAt ?? null, product.expiresAt ?? null, product.imageUri ?? null,
-      product.memo ?? null, product.createdAt);
-    send(response, 201, { product: publicProduct(findById.get(product.id)) });
+      product.memo ?? null, product.createdAt, userId);
+    send(response, 201, { product: publicProduct(findOwnedProduct.get(product.id, userId)) });
   } catch (error) {
     console.error(error);
     if (!response.destroyed && !response.headersSent) send(response, 500, { error: '서버에서 문제가 생겼어요. 잠시 후 다시 시도해 주세요.' });

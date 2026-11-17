@@ -25,7 +25,7 @@ function tempDb() {
 }
 
 /** 서버를 띄우고 로그에서 실제 포트를 읽습니다. 키 환경변수는 테스트마다 명시한 것만 넘깁니다. */
-async function startServer(dbPath, env = {}) {
+async function startServer(dbPath, env = {}, options = {}) {
   const child = spawn(process.execPath, ['--no-warnings', serverFile], {
     env: { PATH: process.env.PATH, DASSEM_DB_PATH: dbPath, DASSEM_HOST: '127.0.0.1', DASSEM_PORT: '0', ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -43,10 +43,16 @@ async function startServer(dbPath, env = {}) {
     child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`server exited ${code}:\n${log}`)); });
   });
   const base = `http://127.0.0.1:${port}`;
+  // 기본 사용자: 서버마다 '테스터'를 만들어 모든 요청에 X-Dasseum-User 헤더로 보냄 (headers로 덮어쓸 수 있음)
+  let defaultUser;
   const api = async (method, path, body, headers = {}) => {
     const response = await fetch(base + path, {
       method,
-      headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
+      headers: {
+        ...(defaultUser ? { 'X-Dasseum-User': defaultUser } : {}),
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...headers,
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await response.text();
@@ -54,12 +60,17 @@ async function startServer(dbPath, env = {}) {
     try { json = JSON.parse(text); } catch { json = undefined; }
     return { status: response.status, json, text, headers: response.headers };
   };
+  // options.userId: 재시작 후에도 같은 사용자로 접속 (앱이 기기에 ID를 저장해 두는 것과 같음)
+  if (options.userId) defaultUser = options.userId;
+  else if (options.user !== false) {
+    defaultUser = (await api('POST', '/api/users', { name: options.userName ?? '테스터' })).json.user.id;
+  }
   const stop = () => new Promise((resolve) => {
     child.removeAllListeners('exit');
     child.once('exit', resolve);
     child.kill('SIGTERM');
   });
-  return { api, stop, log: () => log };
+  return { api, stop, log: () => log, userId: () => defaultUser };
 }
 
 describe('GET /api/health', () => {
@@ -95,21 +106,25 @@ describe('DB 마이그레이션', () => {
     try {
       assert.match(server.log(), /brand, imageUri, status, completedAt, memo 열 추가/);
       assert.match(server.log(), /activity_records 테이블 생성/);
-      const res = await server.api('GET', '/api/products');
-      assert.equal(res.json.products.length, 1);
-      assert.equal(res.json.products[0].name, '기존 토너');
-      assert.equal(res.json.products[0].quantity, 2);
-      assert.equal(res.json.products[0].status, 'owned');
-      const memo = await server.api('PATCH', '/api/products/11111111-1111-1111-1111-111111111111', { memo: '욕실 선반' });
-      assert.equal(memo.json.product.memo, '욕실 선반');
+      assert.match(server.log(), /users 테이블 생성/);
+      assert.match(server.log(), /products 테이블에 userId 열 추가/);
+      assert.match(server.log(), /사용자 구분 이전 데이터: 제품 1개, 기록 0개 — 삭제하지 않고 숨겨서 보관/);
+      // 사용자 구분 이전 제품은 어떤 사용자에게도 보이지 않고, 수정도 불가
+      assert.equal((await server.api('GET', '/api/products')).json.products.length, 0);
+      const patch = await server.api('PATCH', '/api/products/11111111-1111-1111-1111-111111111111', { memo: '욕실 선반' });
+      assert.equal(patch.status, 404);
     } finally { await server.stop(); }
 
-    // 두 번째 시작에서는 추가 작업 없이 그대로
+    // 두 번째 시작에서는 추가 작업 없이 그대로, 기존 데이터는 DB에 그대로 남아 있음
     const again = await startServer(dbPath);
     try {
       assert.match(again.log(), /products 테이블 최신 상태/);
-      assert.equal((await again.api('GET', '/api/products')).json.products[0].memo, '욕실 선반');
+      assert.doesNotMatch(again.log(), /userId 열 추가/);
     } finally { await again.stop(); }
+    const check = new DatabaseSync(dbPath);
+    const row = check.prepare('SELECT name, quantity, userId FROM products WHERE id = ?').get('11111111-1111-1111-1111-111111111111');
+    check.close();
+    assert.deepEqual({ ...row }, { name: '기존 토너', quantity: 2, userId: null });
   });
 });
 
@@ -168,7 +183,7 @@ describe('제품 등록·수정·다씀·보류', () => {
       assert.equal(holdDone.status, 404, '다 쓴 제품으로는 보류 기록을 만들지 않음');
     } finally { await server.stop(); }
 
-    server = await startServer(dbPath);
+    server = await startServer(dbPath, {}, { userId: server.userId() });
     try {
       const products = (await server.api('GET', '/api/products')).json.products;
       assert.equal(products.find((p) => p.id === id).status, 'done');
@@ -386,7 +401,7 @@ describe('구매 분석 (가짜 Gemini)', () => {
     } finally { await server.stop(); }
 
     gemini.reset();
-    server = await startServer(dbPath, env);
+    server = await startServer(dbPath, env, { userId: server.userId() });
     try {
       assert.match(server.log(), /임베딩 캐시 [1-9]\d*개/);
       const afterRestart = await server.api('POST', '/api/purchase-analysis', { query: '비타민D 2000IU' });
@@ -467,5 +482,87 @@ describe('Structured Output · 계산된 숫자 전달 (가짜 Gemini)', () => {
       assert.equal(fallback.json.decision, 'HOLD');
       assert.match(fallback.json.reason, /2개를 갖고 있어요 \(사용기한 (29|30|31)일 남음/);
     } finally { await server.stop(); gemini.close(); }
+  });
+});
+
+describe('사용자 구분', () => {
+  test('사용자마다 제품·기록이 분리되고, 다른 사용자의 제품은 조회·수정·삭제 불가', async () => {
+    const { dbPath } = tempDb();
+    const server = await startServer(dbPath, {}, { userName: '지민' });
+    try {
+      const jimin = server.userId();
+      const friend = (await server.api('POST', '/api/users', { name: '  영석  ' })).json.user;
+      assert.equal(friend.name, '영석', '앞뒤 공백 정리');
+      const asFriend = { 'X-Dasseum-User': friend.id };
+
+      const mine = (await server.api('POST', '/api/products', { name: '선크림', category: '화장품' })).json.product.id;
+      await server.api('POST', '/api/products', { name: '샴푸', category: '생활용품' }, asFriend);
+      await server.api('POST', `/api/products/${mine}/done`, {});
+
+      assert.deepEqual((await server.api('GET', '/api/products')).json.products.map((p) => p.name), ['선크림']);
+      assert.deepEqual((await server.api('GET', '/api/products', undefined, asFriend)).json.products.map((p) => p.name), ['샴푸']);
+      assert.equal((await server.api('GET', '/api/records', undefined, asFriend)).json.records.length, 0, '다른 사람의 다씀 기록은 안 보임');
+      assert.ok(!(await server.api('GET', '/api/products')).text.includes('userId'), '응답에 userId 노출 안 함');
+
+      assert.equal((await server.api('PATCH', `/api/products/${mine}`, { memo: 'x' }, asFriend)).status, 404);
+      assert.equal((await server.api('DELETE', `/api/products/${mine}`, undefined, asFriend)).status, 404);
+      assert.equal((await server.api('POST', `/api/products/${mine}/done`, {}, asFriend)).status, 404);
+      assert.equal((await server.api('POST', '/api/holds', { productId: mine, verdict: 'same' }, asFriend)).status, 404);
+      await server.api('DELETE', '/api/records', undefined, asFriend);
+      assert.equal((await server.api('GET', '/api/records')).json.records.length, 1, '다른 사람의 초기화가 내 기록을 지우지 않음');
+
+      const me = await server.api('GET', '/api/users/me');
+      assert.deepEqual(me.json.user, { id: jimin, name: '지민' });
+      const renamed = await server.api('PATCH', '/api/users/me', { name: '지민2' });
+      assert.equal(renamed.json.user.name, '지민2');
+      assert.equal((await server.api('PATCH', '/api/users/me', { name: '' })).status, 400);
+      assert.equal((await server.api('POST', '/api/users', { name: 'x'.repeat(21) })).status, 400);
+    } finally { await server.stop(); }
+  });
+
+  test('사용자 헤더가 없거나 모르는 ID면 401, health와 사진 파일은 공개', async () => {
+    const { dbPath } = tempDb();
+    const server = await startServer(dbPath, {}, { user: false });
+    try {
+      for (const [method, path] of [['GET', '/api/products'], ['GET', '/api/records'], ['POST', '/api/products'], ['POST', '/api/products/recognize'], ['POST', '/api/purchase-analysis'], ['POST', '/api/products/images']]) {
+        const res = await server.api(method, path, method === 'POST' ? {} : undefined);
+        assert.equal(res.status, 401, `${method} ${path}`);
+        assert.equal(res.json.code, 'USER_REQUIRED');
+      }
+      const unknown = await server.api('GET', '/api/products', undefined, { 'X-Dasseum-User': '00000000-0000-4000-8000-000000000000' });
+      assert.equal(unknown.status, 401);
+      assert.equal((await server.api('GET', '/api/health')).status, 200);
+    } finally { await server.stop(); }
+  });
+});
+
+describe('요청 제한', () => {
+  test('AI 요청은 사용자별 한도를 넘으면 429(Retry-After), 다른 사용자는 영향 없음', async () => {
+    const { dbPath } = tempDb();
+    const server = await startServer(dbPath, { DASSEM_AI_LIMIT_PER_USER: '3' });
+    try {
+      for (let i = 0; i < 3; i += 1) {
+        assert.equal((await server.api('POST', '/api/purchase-analysis', { query: '선크림' })).status, 503, '키 없음(503)이어도 횟수에 포함');
+      }
+      const limited = await server.api('POST', '/api/purchase-analysis', { query: '선크림' });
+      assert.equal(limited.status, 429);
+      assert.equal(limited.json.code, 'RATE_LIMITED');
+      assert.match(limited.json.error, /요청이 너무 많아요/);
+      assert.ok(Number(limited.headers.get('retry-after')) > 0);
+      assert.equal((await server.api('GET', '/api/products')).status, 200, '일반 API는 제한 없음');
+
+      const other = (await server.api('POST', '/api/users', { name: '다른사람' })).json.user.id;
+      assert.equal((await server.api('POST', '/api/purchase-analysis', { query: '선크림' }, { 'X-Dasseum-User': other })).status, 503);
+    } finally { await server.stop(); }
+  });
+
+  test('사용자 생성은 IP별 한도로 대량 생성을 막음', async () => {
+    const { dbPath } = tempDb();
+    const server = await startServer(dbPath, { DASSEM_SIGNUP_LIMIT_PER_IP: '2' }, { user: false });
+    try {
+      assert.equal((await server.api('POST', '/api/users', { name: 'a' })).status, 201);
+      assert.equal((await server.api('POST', '/api/users', { name: 'b' })).status, 201);
+      assert.equal((await server.api('POST', '/api/users', { name: 'c' })).status, 429);
+    } finally { await server.stop(); }
   });
 });
