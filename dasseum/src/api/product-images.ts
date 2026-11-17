@@ -10,11 +10,14 @@ function apiBaseUrl() {
   return baseUrl;
 }
 
-export async function searchProductImages(image: string, signal?: AbortSignal) {
+export async function searchProductImages(
+  source: { query?: string; image?: string },
+  signal?: AbortSignal,
+) {
   const response = await fetch(`${apiBaseUrl()}/api/products/images/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image }),
+    body: JSON.stringify(source),
     signal,
   }).catch(() => {
     throw new Error('추천 사진을 불러오지 못했어요.');
