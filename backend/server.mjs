@@ -6,7 +6,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { fetchWithRetry } from './http-util.mjs';
 import { recognizeProduct } from './product-vision.mjs';
-import { analyzePurchase } from './purchase-analysis.mjs';
+import { createEmbeddingStore } from './embedding-store.mjs';
+import { analyzePurchase, embeddingDimensions, embeddingModel } from './purchase-analysis.mjs';
 import { downloadImage, DownloadError, sniffImageType } from './safe-download.mjs';
 
 const categories = ['화장품', '영양제', '의약품', '생활용품'];
@@ -71,6 +72,10 @@ database.exec(`
 if (!hadActivityTable && databaseExisted) console.log('[db] 마이그레이션: activity_records 테이블 생성 (다씀·구매 보류 기록)');
 console.log(`[db] 제품 ${database.prepare('SELECT COUNT(*) AS n FROM products').get().n}개, 기록 ${database.prepare('SELECT COUNT(*) AS n FROM activity_records').get().n}개`);
 
+const embeddingStore = createEmbeddingStore(database, { model: embeddingModel, dimensions: embeddingDimensions });
+const prunedEmbeddings = embeddingStore.pruneOlderThan(90);
+console.log(`[db] 임베딩 캐시 ${embeddingStore.size()}개${prunedEmbeddings ? ` (오래된 ${prunedEmbeddings}개 정리)` : ''}`);
+
 const insert = database.prepare(`
   INSERT INTO products (id, name, brand, category, quantity, openedAt, expiresAt, imageUri, memo, createdAt)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -91,7 +96,9 @@ const insertRecord = database.prepare(`
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const removeDoneRecords = database.prepare("DELETE FROM activity_records WHERE type = 'done' AND productId = ?");
-const removeProductRecords = database.prepare('DELETE FROM activity_records WHERE productId = ?');
+// 제품을 지워도 다씀·구매 보류 기록(이름·카테고리 스냅샷)은 남기고 제품 연결만 끊습니다.
+const detachProductRecords = database.prepare('UPDATE activity_records SET productId = NULL WHERE productId = ?');
+const removeAllRecords = database.prepare('DELETE FROM activity_records');
 const countImageReferences = database.prepare(
   "SELECT COUNT(*) AS n FROM products WHERE imageUri = ? OR imageUri LIKE '%' || ?",
 );
@@ -448,6 +455,12 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && path === '/api/records') {
       return send(response, 200, { records: listRecords.all().map(publicRecord) });
     }
+    // 설정 > '모든 데이터 초기화' 전용. 제품 삭제만으로는 기록이 남기 때문에 따로 지웁니다.
+    if (request.method === 'DELETE' && path === '/api/records') {
+      const { changes } = removeAllRecords.run();
+      console.log(`[records] 활동 기록 ${changes}개 삭제 (모든 데이터 초기화)`);
+      return send(response, 200, { deleted: Number(changes) });
+    }
     if (request.method === 'DELETE' && doneMatch) {
       const existing = findById.get(doneMatch[1]);
       if (!existing) return send(response, 404, { error: '제품을 찾을 수 없어요. 이미 삭제됐을 수 있어요.' });
@@ -464,7 +477,7 @@ const server = createServer(async (request, response) => {
       const existing = findById.get(productMatch[1]);
       if (!existing) return send(response, 404, { error: '제품을 찾을 수 없어요. 이미 삭제됐을 수 있어요.' });
       transaction(() => {
-        removeProductRecords.run(productMatch[1]);
+        detachProductRecords.run(productMatch[1]);
         remove.run(productMatch[1]);
       });
       removeImageIfUnused(existing.imageUri);
@@ -548,7 +561,7 @@ const server = createServer(async (request, response) => {
     }
     if (path === '/api/purchase-analysis') {
       const products = listOwned.all().map(publicProduct);
-      const { status, result } = await analyzePurchase(body?.query, body?.purpose, products);
+      const { status, result } = await analyzePurchase(body?.query, body?.purpose, products, { embeddingStore });
       return send(response, status, result);
     }
     if (path === '/api/products/images/search') {
