@@ -56,6 +56,7 @@ export default function Home() {
 
         <SectionHead title="먼저 써야 할 제품" action="전체보기" onAction={() => router.push('/first')} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 20, paddingBottom: 28 }}>
+          {firsts.length === 0 && <T style={[tx(14, 20, 400, C.alt), { paddingVertical: 12 }]}>지금 먼저 써야 할 제품이 없어요</T>}
           {firsts.map((p) => (
             <Card key={p.id} onPress={() => openDetail(p.id)} style={{ width: 148, padding: 12, gap: 10 }}>
               <ProdImg size={124} uri={p.imageUri} />
@@ -70,6 +71,7 @@ export default function Home() {
         <SectionHead title="사용기한 임박" />
         <View style={{ paddingHorizontal: 20, paddingBottom: 28 }}>
           <Card style={{ paddingVertical: 4 }}>
+            {urgent.length === 0 && <T style={[tx(14, 20, 400, C.alt), { paddingVertical: 14, paddingHorizontal: 16 }]}>기한이 가까운 제품이 없어요</T>}
             {urgent.map((p, i) => (
               <Press key={p.id} onPress={() => openDetail(p.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 16 }}>
                 {i > 0 && <Line at="top" />}
@@ -85,10 +87,10 @@ export default function Home() {
         </View>
 
         <View style={{ paddingHorizontal: 20 }}>
-          <Card tone="cream" onPress={() => router.push({ pathname: '/records', params: { tab: 'hold' } })} style={{ paddingVertical: 16, paddingRight: 16, paddingLeft: 20, flexDirection: 'row', alignItems: 'center' }}>
+          <Card onPress={() => router.push({ pathname: '/records', params: { tab: 'hold' } })} style={{ paddingVertical: 16, paddingRight: 16, paddingLeft: 20, flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ flex: 1 }}>
               <T style={tx(13, 18, 600, C.neutral)}>이번 달 소비 관리</T>
-              <T style={[tx(17, 26, 700), { marginTop: 2 }]}>다씀 {dones.length}개 · 구매 보류 {holdList.length}회</T>
+              <T style={[tx(17, 26, 700), { marginTop: 2 }]}>다씀 <T style={tx(17, 26, 700, C.logo)}>{dones.length}</T>개 · 구매 보류 <T style={tx(17, 26, 700, C.logo)}>{holdList.length}</T>회</T>
             </View>
             <Icon name="chevronRight" size={20} color={C.alt} />
           </Card>
