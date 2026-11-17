@@ -17,15 +17,18 @@ export default function Result() {
   const mode = (params.mode === 'photo' ? 'photo' : 'search') as CheckMode;
   const q = params.q ?? '';
   const album = params.album === '1';
-  const { product, products, completed, hold, setQuery } = useApp();
+  const { product, hasProduct, products, completed, hold, setQuery } = useApp();
   const toast = useToast();
   const openCamera = useOpenCamera();
   const [ask, setAsk] = useState(false);
   const pendingAnalysis = getPendingPurchaseAnalysis();
   const aiResult = pendingAnalysis?.query === q ? pendingAnalysis : undefined;
-  const r = aiResult
+  const raw = aiResult
     ? { verdict: aiResult.verdict, items: aiResult.matches.map((item) => item.productId) }
     : matchOwnedProducts(q, products().filter((item) => !completed.includes(item.id)));
+  // AI가 가리킨 제품이 로컬 목록에 없으면(다른 기기에서 삭제 등) product()가 예외를 던지므로 걸러냅니다.
+  const liveItems = raw.items.filter((id) => hasProduct(id));
+  const r = { verdict: liveItems.length ? raw.verdict : 'none' as const, items: liveItems };
 
   const V = {
     same: {

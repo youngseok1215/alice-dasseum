@@ -51,6 +51,8 @@ interface Store extends State {
   undoDone: (id: string) => Promise<void>;
   openToday: (id: string) => void;
   product: (id: string) => Product;
+  /** 삭제됐거나 아직 불러오지 못한 제품인지 확인 — 화면에서 product() 전에 먼저 확인 */
+  hasProduct: (id: string | undefined) => boolean;
   products: () => Product[];
   registerProduct: (form: ProductForm) => Promise<string>;
   updateProduct: (id: string, form: ProductForm) => Promise<void>;
@@ -120,6 +122,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   }, [remoteProducts]);
 
   const product = useCallback((id: string) => findProduct(s, id), [findProduct, s]);
+  const hasProduct = useCallback((id: string | undefined) => Boolean(id) && (
+    remoteProducts.some((item) => item.id === id) || s.registeredProducts.some((item) => item.id === id)
+  ), [remoteProducts, s.registeredProducts]);
   const products = useCallback(() => {
     const byId = new Map<string, Product>();
     remoteProducts.forEach((item) => byId.set(item.id, product(item.id)));
@@ -302,6 +307,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     undoDone,
     openToday,
     product,
+    hasProduct,
     products,
     registerProduct,
     updateProduct,
@@ -316,7 +322,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     setDevPhotoVerdict,
     setDevRegisterFail,
     reset,
-  }), [s, ready, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, products, registerProduct, updateProduct, setProductQuantity, deleteProduct, refreshProducts, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
+  }), [s, ready, holdList, dones, completed, setQuery, addRecent, removeRecent, hold, markDone, undoDone, openToday, product, hasProduct, products, registerProduct, updateProduct, setProductQuantity, deleteProduct, refreshProducts, setNotifyEnabled, setCameraPermission, markAlertRead, markAlertsSeen, finishOnboarding, setDevPhotoVerdict, setDevRegisterFail, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

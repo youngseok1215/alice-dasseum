@@ -3,13 +3,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 import { nav, Screen } from '@/components/shell';
 import { ActionArea, Card, DButton, ddayBadge, Mascot, ProdImg, T } from '@/components/ui';
+import { MissingProduct } from '@/components/missing-product';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
-export default function Held() {
+function HeldScreen() {
   const { item } = useLocalSearchParams<{ item?: string }>();
   const { product, holdList } = useApp();
-  const p = product(item || 'vitd');
+  const p = product(item ?? '');
   return (
     <Screen>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
@@ -35,4 +36,12 @@ export default function Held() {
       </ActionArea>
     </Screen>
   );
+}
+
+// 제품이 삭제됐거나 목록에 없으면 product()가 예외를 던지므로, 화면을 그리기 전에 먼저 확인합니다.
+export default function Held() {
+  const params = useLocalSearchParams<{ item?: string }>();
+  const { hasProduct } = useApp();
+  if (!hasProduct(params.item)) return <MissingProduct />;
+  return <HeldScreen />;
 }

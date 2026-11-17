@@ -17,6 +17,7 @@ import { DateField } from '@/components/DateField';
 import { nav, Screen, Scroll, useToast } from '@/components/shell';
 import { ActionArea, DBadge, DButton, Hair, Icon, T, TopBar } from '@/components/ui';
 import { CATEGORIES } from '@/data/products';
+import { MissingProduct } from '@/components/missing-product';
 import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
 
@@ -34,7 +35,7 @@ function Label({ children, hint }: { children: ReactNode; hint?: string }) {
   );
 }
 
-export default function Recognized() {
+function RecognizedScreen() {
   const { manual, expShot, edit } = useLocalSearchParams<{ manual?: string; expShot?: string; edit?: string }>();
   const { registerProduct, updateProduct, product } = useApp();
   const toast = useToast();
@@ -77,17 +78,19 @@ export default function Recognized() {
       ? imageChoice.preview
       : imageChoice?.uri;
 
+  // 검색어도 사진도 없으면 추천 사진을 숨깁니다 (effect 안에서 setState 하지 않고 렌더 시 계산).
+  const imageQuery = [form.brand.trim(), form.name.trim()].filter(Boolean).join(' ');
+  const imageSearchActive = !existing && (imageQuery.length >= 2 || Boolean(imageSearchSource));
+  const visibleSuggestions = imageSearchActive ? suggestions : [];
+  const showSearching = imageSearchActive && searchingImages;
+
   useEffect(() => {
     if (existing) return;
-    const query = [form.brand.trim(), form.name.trim()].filter(Boolean).join(' ');
-    if (query.length < 2 && !imageSearchSource) {
-      setSearchingImages(false);
-      setSuggestions([]);
-      return;
-    }
+    const query = imageQuery;
+    if (query.length < 2 && !imageSearchSource) return;
     const controller = new AbortController();
-    setSearchingImages(true);
     const timer = setTimeout(() => {
+      setSearchingImages(true);
       searchProductImages(
         { query: query.length >= 2 ? query : undefined, image: imageSearchSource },
         controller.signal,
@@ -110,7 +113,7 @@ export default function Recognized() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [existing, form.brand, form.name, imageSearchSource]);
+  }, [existing, imageQuery, imageSearchSource]);
 
   const pickOwnPhoto = async (camera: boolean) => {
     try {
@@ -288,10 +291,10 @@ export default function Recognized() {
                 ? <Image source={{ uri: previewUri }} contentFit="contain" style={{ width: '100%', height: 180 }} accessibilityLabel="선택한 제품 사진" />
                 : <><Icon name="image" size={32} color={C.imageIcon} /><T style={[tx(13, 18, 400, C.alt), { marginTop: 6 }]}>선택한 사진이 없어요</T></>}
             </View>
-            {searchingImages && <T style={[tx(13, 18, 400, C.alt), { marginTop: 8 }]}>인터넷에서 같은 제품 사진을 찾고 있어요…</T>}
-            {!searchingImages && suggestions.length > 0 && (
+            {showSearching && <T style={[tx(13, 18, 400, C.alt), { marginTop: 8 }]}>인터넷에서 같은 제품 사진을 찾고 있어요…</T>}
+            {!showSearching && visibleSuggestions.length > 0 && (
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                {suggestions.slice(0, 3).map((item) => {
+                {visibleSuggestions.slice(0, 3).map((item) => {
                   const selected = imageChoice?.kind === 'remote' && imageChoice.url === item.url;
                   return (
                     <Pressable key={item.url} onPress={() => { userPickedImage.current = true; setImageChoice({ kind: 'remote', url: item.url, preview: item.thumbnail }); }}
@@ -303,7 +306,7 @@ export default function Recognized() {
                 })}
               </View>
             )}
-            {!searchingImages && !imageSearchConfigured && <T style={[tx(13, 18, 400, C.alt), { marginTop: 8 }]}>카카오 이미지 검색 키가 설정되지 않았어요. 사진 없이 등록하거나 직접 사진을 선택해 주세요.</T>}
+            {!showSearching && imageSearchActive && !imageSearchConfigured && <T style={[tx(13, 18, 400, C.alt), { marginTop: 8 }]}>카카오 이미지 검색 키가 설정되지 않았어요. 사진 없이 등록하거나 직접 사진을 선택해 주세요.</T>}
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
               {capturedPhoto && <View style={{ flex: 1 }}><DButton size="md" variant="outlined" label="촬영한 사진" onPress={() => { userPickedImage.current = true; setImageChoice({ kind: 'captured', dataUri: capturedPhoto }); }} /></View>}
               <View style={{ flex: 1 }}><DButton size="md" variant="outlined" label="직접 촬영" onPress={() => void pickOwnPhoto(true)} /></View>
@@ -330,3 +333,11 @@ export default function Recognized() {
   );
 }
 
+
+// 제품이 삭제됐거나 목록에 없으면 product()가 예외를 던지므로, 화면을 그리기 전에 먼저 확인합니다.
+export default function Recognized() {
+  const params = useLocalSearchParams<{ edit?: string }>();
+  const { hasProduct } = useApp();
+  if (params.edit && !hasProduct(params.edit)) return <MissingProduct />;
+  return <RecognizedScreen />;
+}

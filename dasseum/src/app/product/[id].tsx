@@ -7,17 +7,18 @@ import { BottomSheet, Dialog } from '@/components/overlay';
 import { nav, Screen, Scroll, useToast } from '@/components/shell';
 import { ActionArea, DBadge, DButton, ddayBadge, Hair, Icon, IconBtn, Line, Press, T, TextBtn, TopBar } from '@/components/ui';
 import { reasonOf } from '@/data/products';
+import { MissingProduct } from '@/components/missing-product';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
-export default function Detail() {
+function DetailScreen() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const { product, openToday, markDone, setProductQuantity, deleteProduct } = useApp();
   const toast = useToast();
   const [menu, setMenu] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [quantitySaving, setQuantitySaving] = useState(false);
-  const p = product(id ?? 'vitd');
+  const p = product(id);
   const reason = reasonOf(p);
   const v = tx(15, 22, 600);
   const row = (k: string, val: ReactNode) => (
@@ -139,4 +140,12 @@ export default function Detail() {
       </Dialog>
     </Screen>
   );
+}
+
+// 제품이 삭제됐거나 목록에 없으면 product()가 예외를 던지므로, 화면을 그리기 전에 먼저 확인합니다.
+export default function Detail() {
+  const params = useLocalSearchParams<{ id?: string }>();
+  const { hasProduct } = useApp();
+  if (!hasProduct(params.id)) return <MissingProduct />;
+  return <DetailScreen />;
 }

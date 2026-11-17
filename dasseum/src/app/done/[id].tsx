@@ -5,14 +5,15 @@ import { Alert, Animated, Easing, View } from 'react-native';
 import { nav, Screen, useToast } from '@/components/shell';
 import { ActionArea, Card, DBadge, DButton, Mascot, Press, ProdImg, T } from '@/components/ui';
 import { TODAY } from '@/data/products';
+import { MissingProduct } from '@/components/missing-product';
 import { useApp } from '@/store/AppStore';
 import { C, ND, tx } from '@/theme/tokens';
 
-export default function Done() {
+function DoneScreen() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const { product, dones, undoDone } = useApp();
   const toast = useToast();
-  const p = product(id || 'vitd');
+  const p = product(id);
   const [snack, setSnack] = useState(true);
   const fade = useRef(new Animated.Value(0)).current;
 
@@ -68,4 +69,12 @@ export default function Done() {
       </ActionArea>
     </Screen>
   );
+}
+
+// 제품이 삭제됐거나 목록에 없으면 product()가 예외를 던지므로, 화면을 그리기 전에 먼저 확인합니다.
+export default function Done() {
+  const params = useLocalSearchParams<{ id?: string }>();
+  const { hasProduct } = useApp();
+  if (!hasProduct(params.id)) return <MissingProduct />;
+  return <DoneScreen />;
 }

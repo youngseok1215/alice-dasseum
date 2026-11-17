@@ -21,7 +21,9 @@ export default function Analyzing() {
   useEffect(() => {
     if (mode === 'search') {
       const controller = new AbortController();
-      analyzePurchase(q, undefined, controller.signal)
+      // 결과 화면이 서버와 같은 제품 목록을 보도록 먼저 새로고침합니다.
+      refreshProducts().catch(() => {})
+        .then(() => analyzePurchase(q, undefined, controller.signal))
         .then(() => router.replace({ pathname: '/result', params: { mode, q } }))
         .catch((error) => {
           if (controller.signal.aborted) return;

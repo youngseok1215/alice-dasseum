@@ -6,6 +6,7 @@ import { MessageIcon, Sparkle } from '@/components/ai';
 import { nav, Screen, Scroll, useToast } from '@/components/shell';
 import { ActionArea, Card, DBadge, DButton, Hair, Icon, T, TopBar } from '@/components/ui';
 import { useOpenCamera } from '@/hooks/use-open-camera';
+import { MissingProduct } from '@/components/missing-product';
 import { useApp } from '@/store/AppStore';
 import { C, FONT, tx } from '@/theme/tokens';
 
@@ -17,9 +18,9 @@ const RESULTS: Record<string, ['ok' | 'warn' | 'neutral', string, string]> = {
 };
 
 
-export default function AiAnalysis() {
+function AiAnalysisScreen() {
   const openCamera = useOpenCamera();
-  const { id = 'vitd', q = '', mode = 'search' } = useLocalSearchParams<{ id?: string; q?: string; mode?: string }>();
+  const { id = '', q = '', mode = 'search' } = useLocalSearchParams<{ id?: string; q?: string; mode?: string }>();
   const { product, hold, setQuery } = useApp();
   const p = product(id);
   // 프로토타입 kind: 비타민D(표기 비교) · 충전기(구매 목적 반영) · 그 외 등록 제품(이름만 비슷)
@@ -120,4 +121,12 @@ export default function AiAnalysis() {
       </Modal>
     </Screen>
   );
+}
+
+// 제품이 삭제됐거나 목록에 없으면 product()가 예외를 던지므로, 화면을 그리기 전에 먼저 확인합니다.
+export default function AiAnalysis() {
+  const params = useLocalSearchParams<{ id?: string }>();
+  const { hasProduct } = useApp();
+  if (!hasProduct(params.id)) return <MissingProduct />;
+  return <AiAnalysisScreen />;
 }
