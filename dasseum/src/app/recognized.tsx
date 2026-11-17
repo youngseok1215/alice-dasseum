@@ -45,9 +45,10 @@ export default function Recognized() {
   const expiryRead = expShot !== '0';
   const dt = (value: string | null) => (value ? value.replace(/\./g, '-') : '');
   const [form, setForm] = useState(existing
-    ? { name: existing.name, cat: existing.cat as string, opened: dt(existing.opened), expires: dt(existing.expires) }
+    ? { name: existing.name, brand: existing.brand, cat: existing.cat as string, opened: dt(existing.opened), expires: dt(existing.expires) }
     : {
       name: isManual ? '' : suggestion?.name || '',
+      brand: isManual ? '' : suggestion?.brand || '',
       cat: isManual ? '' : suggestion?.category || '',
       opened: '',
       expires: !isManual && expiryRead ? suggestion?.expiresAt || '' : '',
@@ -74,24 +75,39 @@ export default function Recognized() {
       : imageChoice?.uri;
 
   useEffect(() => {
-    if (!imageSearchSource || existing) return;
+    if (existing) return;
+    const query = [form.brand.trim(), form.name.trim()].filter(Boolean).join(' ');
+    if (query.length < 2 && !imageSearchSource) {
+      setSearchingImages(false);
+      setSuggestions([]);
+      return;
+    }
     const controller = new AbortController();
-    searchProductImages(imageSearchSource, controller.signal)
-      .then((result) => {
-        setImageSearchConfigured(result.configured);
-        setSuggestions(result.images);
-        if (result.images[0] && !userPickedImage.current) {
-          setImageChoice({ kind: 'remote', url: result.images[0].url, preview: result.images[0].thumbnail });
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setSuggestions([]);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setSearchingImages(false);
-      });
-    return () => controller.abort();
-  }, [existing, imageSearchSource]);
+    setSearchingImages(true);
+    const timer = setTimeout(() => {
+      searchProductImages(
+        { query: query.length >= 2 ? query : undefined, image: imageSearchSource },
+        controller.signal,
+      )
+        .then((result) => {
+          setImageSearchConfigured(result.configured);
+          setSuggestions(result.images);
+          if (result.images[0] && !userPickedImage.current) {
+            setImageChoice({ kind: 'remote', url: result.images[0].url, preview: result.images[0].thumbnail });
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSuggestions([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearchingImages(false);
+        });
+    }, 600);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [existing, form.brand, form.name, imageSearchSource]);
 
   const pickOwnPhoto = async (camera: boolean) => {
     try {
@@ -144,7 +160,7 @@ export default function Recognized() {
           cat,
           opened: form.opened,
           expires: form.expires,
-          brand: existing.brand,
+          brand: form.brand.trim() || existing.brand,
           imageUri,
         });
         nav.back();
@@ -157,7 +173,7 @@ export default function Recognized() {
         opened: form.opened,
         expires: form.expires,
         manual: isManual,
-        brand: suggestion?.brand || undefined,
+        brand: form.brand.trim() || undefined,
         imageUri,
       });
       clearPendingRegistration();
@@ -194,6 +210,20 @@ export default function Recognized() {
             </View>
           </View>
           <View>
+            <Label hint="선택 사항">브랜드</Label>
+            <View style={{ height: 48, borderRadius: 12, backgroundColor: C.white, justifyContent: 'center' }}>
+              <Hair radius={12} color={C.lineNeutral} />
+              <TextInput
+                value={form.brand}
+                onChangeText={(value) => set('brand', value)}
+                placeholder="브랜드를 입력하면 사진을 더 정확히 찾아요"
+                placeholderTextColor={C.alt}
+                allowFontScaling={false}
+                style={{ height: 48, paddingHorizontal: 14, paddingVertical: 0, fontSize: 16, fontFamily: FONT[500], letterSpacing: 0.096, color: C.ink }}
+              />
+            </View>
+          </View>
+          <View>
             <Label>카테고리</Label>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
               {CATEGORIES.map((category) => {
@@ -218,7 +248,7 @@ export default function Recognized() {
           </View>
 
           <View>
-            <Label hint="추천 사진 또는 직접 찍은 사진">제품 사진</Label>
+            <Label hint="선택 사항 · 없어도 등록할 수 있어요">제품 사진</Label>
             <View style={{ minHeight: 180, borderRadius: 16, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
               <Hair radius={16} color={C.lineNeutral} />
               {previewUri
@@ -240,12 +270,25 @@ export default function Recognized() {
                 })}
               </View>
             )}
-            {!searchingImages && !imageSearchConfigured && <T style={[tx(13, 18, 400, C.alt), { marginTop: 8 }]}>이미지 검색 키가 설정되지 않았어요. 촬영한 사진이나 앨범 사진을 사용해 주세요.</T>}
+            {!searchingImages && !imageSearchConfigured && <T style={[tx(13, 18, 400, C.alt), { marginTop: 8 }]}>카카오 이미지 검색 키가 설정되지 않았어요. 사진 없이 등록하거나 직접 사진을 선택해 주세요.</T>}
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
               {capturedPhoto && <View style={{ flex: 1 }}><DButton size="md" variant="outlined" label="촬영한 사진" onPress={() => { userPickedImage.current = true; setImageChoice({ kind: 'captured', dataUri: capturedPhoto }); }} /></View>}
               <View style={{ flex: 1 }}><DButton size="md" variant="outlined" label="직접 촬영" onPress={() => void pickOwnPhoto(true)} /></View>
               <View style={{ flex: 1 }}><DButton size="md" variant="outlined" label="앨범 선택" onPress={() => void pickOwnPhoto(false)} /></View>
             </View>
+            {imageChoice && (
+              <View style={{ marginTop: 8 }}>
+                <DButton
+                  size="md"
+                  variant="outlined"
+                  label="사진 사용 안 함"
+                  onPress={() => {
+                    userPickedImage.current = true;
+                    setImageChoice(undefined);
+                  }}
+                />
+              </View>
+            )}
           </View>
         </View>
       </Scroll>
