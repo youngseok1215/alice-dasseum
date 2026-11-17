@@ -150,7 +150,7 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
   const registerProduct = useCallback(async (form: ProductForm) => {
     const saved = await createRemoteProduct({
       name: form.name.trim(),
-      brand: form.brand || (form.manual ? '직접 등록' : undefined),
+      brand: form.brand || undefined,
       category: form.cat,
       openedAt: apiDate(form.opened),
       expiresAt: apiDate(form.expires),
