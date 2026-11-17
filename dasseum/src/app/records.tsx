@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { nav, Screen, Scroll } from '@/components/shell';
 import { Card, DBadge, Line, ProdImg, T, TopBar } from '@/components/ui';
+import { CATEGORIES, isCurrentMonth } from '@/data/products';
 import { useApp } from '@/store/AppStore';
 import { C, tx } from '@/theme/tokens';
 
@@ -13,10 +14,16 @@ export default function Records() {
   const [period, setPeriod] = useState<'month' | 'all'>('month');
   const [tab, setTab] = useState<'hold' | 'done'>(params.tab === 'done' ? 'done' : 'hold');
   const month = period === 'month';
-  const doneN = month ? dones.length : 11 + dones.length;
-  const holdN = month ? holdList.length : holdList.length + 5;
-  const dist: [string, number][] = month ? [['화장품', 2], ['생활용품', 1], ['영양제', 0], ['의약품', 0]] : [['화장품', 8], ['영양제', 3], ['생활용품', 2], ['의약품', 1]];
+  const visibleDones = month ? dones.filter((item) => isCurrentMonth(item.date)) : dones;
+  const visibleHolds = month ? holdList.filter((item) => isCurrentMonth(item.date)) : holdList;
+  const doneN = visibleDones.length;
+  const holdN = visibleHolds.length;
+  const dist: [string, number][] = CATEGORIES.map((category) => [
+    category,
+    visibleDones.filter((item) => item.cat === category).length,
+  ]);
   const max = Math.max(...dist.map((d) => d[1]), 1);
+  const visibleRecords = tab === 'hold' ? visibleHolds : visibleDones;
 
   const seg = (k: 'month' | 'all', l: string) => {
     const on = period === k;
@@ -67,7 +74,7 @@ export default function Records() {
             </Pressable>
           ))}
         </View>
-        {(tab === 'hold' ? holdList : dones).map((it, i) => (
+        {visibleRecords.map((it, i) => (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
             <Line at="bottom" />
             <ProdImg size={44} radius={10} />
