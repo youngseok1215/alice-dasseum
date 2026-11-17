@@ -10,6 +10,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { after, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { fetchWithRetry } from '../http-util.mjs';
+import { specDifferences, specVerdict } from '../product-spec.mjs';
+import { startFakeGemini } from './fake-gemini.mjs';
 
 const serverFile = fileURLToPath(new URL('../server.mjs', import.meta.url));
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
@@ -184,7 +186,16 @@ describe('제품 등록·수정·다씀·보류', () => {
       const deleted = await server.api('DELETE', `/api/products/${otherId}`);
       assert.equal(deleted.json.deleted, true);
       records = (await server.api('GET', '/api/records')).json.records;
-      assert.equal(records.filter((r) => r.productId === otherId).length, 0);
+      assert.equal(records.filter((r) => r.productId === otherId).length, 0, '삭제된 제품과의 연결은 끊김');
+      const kept = records.filter((r) => r.type === 'hold' && r.query === '비타민D 2000IU');
+      assert.equal(kept.length, 1, '제품을 지워도 구매 보류 기록은 남음');
+      assert.equal(kept[0].name, '비타민D');
+      assert.equal(kept[0].category, '영양제');
+
+      // '모든 데이터 초기화'용 기록 전체 삭제
+      const cleared = await server.api('DELETE', '/api/records');
+      assert.equal(cleared.status, 200);
+      assert.equal((await server.api('GET', '/api/records')).json.records.length, 0);
     } finally { await server.stop(); }
   });
 });
@@ -304,5 +315,66 @@ describe('fetchWithRetry', () => {
       await assert.rejects(fetchWithRetry(up.url, {}, { timeoutMs: 200, retries: 1, label: 'test' }), { name: 'TimeoutError' });
       assert.equal(up.calls(), 2);
     } finally { up.close(); }
+  });
+});
+
+describe('제품 규격 비교 (용량·함량)', () => {
+  test('규격을 뺀 이름이 같으면 규격 차이로 동일/유사 판정', () => {
+    const vit = { name: '비타민D 1000IU', brand: '온데이' };
+    assert.equal(specVerdict('비타민D 2000IU', vit), 'similar');
+    assert.equal(specVerdict('온데이 비타민D 1000IU', vit), 'same');
+    assert.equal(specVerdict('센텔라 수분 크림', { name: '센텔라 수분 크림 80ml' }), 'same', '검색어에 용량이 없으면 같은 제품');
+    assert.equal(specVerdict('샴푸 1L', { name: '샴푸 1000ml' }), 'same', '단위 환산');
+    assert.equal(specVerdict('센텔라 수분크림 100㎖', { name: '센텔라 수분 크림 80ml' }), 'similar', '전각 단위·띄어쓰기');
+    assert.equal(specVerdict('마그네슘 500mg', vit), undefined, '이름이 다르면 임베딩 판정을 따름');
+    assert.deepEqual(specDifferences('오메가3 60캡슐', '오메가3 90캡슐'), [{ unit: '캡슐', query: '60캡슐', owned: '90캡슐' }]);
+    assert.deepEqual(specDifferences('마그네슘 500mg', '마그네슘 500mg 120정'), []);
+  });
+});
+
+describe('구매 분석 (가짜 Gemini)', () => {
+  test('임베딩을 SQLite에 저장해 재시작 후 다시 요청하지 않고, 규격 차이를 판정에 반영', async () => {
+    const gemini = await startFakeGemini();
+    const { dbPath } = tempDb();
+    const env = { GEMINI_API_KEY: 'test-key', GEMINI_API_BASE_URL: gemini.url };
+    let server = await startServer(dbPath, env);
+    try {
+      const vit = (await server.api('POST', '/api/products', { name: '비타민D 1000IU', brand: '온데이', category: '영양제', expiresAt: '2027-06-30' })).json.product.id;
+      await server.api('POST', '/api/products', { name: '오메가3 90캡슐', category: '영양제' });
+      await server.api('POST', '/api/products', { name: '센텔라 수분 크림 80ml', category: '화장품' });
+
+      const first = await server.api('POST', '/api/purchase-analysis', { query: '비타민D 2000IU' });
+      assert.equal(first.status, 200);
+      assert.equal(first.json.verdict, 'similar');
+      assert.equal(first.json.matchedBy, 'name');
+      assert.equal(first.json.matches[0].productId, vit);
+      assert.deepEqual(first.json.specDifference, [{ unit: 'IU', query: '2000IU', owned: '1000IU' }]);
+      assert.match(gemini.state.lastPrompt, /규격 차이: 보유 제품은 1000IU, 구매 예정 제품은 2000IU/);
+      assert.ok(gemini.state.embedCalls >= 2, '처음에는 검색어와 보유 제품 임베딩을 요청');
+
+      gemini.reset();
+      const again = await server.api('POST', '/api/purchase-analysis', { query: '비타민D 2000IU' });
+      assert.equal(again.json.verdict, 'similar');
+      assert.equal(gemini.state.embedCalls, 0, '같은 서버에서는 캐시 사용');
+    } finally { await server.stop(); }
+
+    gemini.reset();
+    server = await startServer(dbPath, env);
+    try {
+      assert.match(server.log(), /임베딩 캐시 [1-9]\d*개/);
+      const afterRestart = await server.api('POST', '/api/purchase-analysis', { query: '비타민D 2000IU' });
+      assert.equal(afterRestart.json.verdict, 'similar');
+      assert.equal(gemini.state.embedCalls, 0, '재시작 후에도 SQLite 캐시로 임베딩 재요청 없음');
+
+      const same = await server.api('POST', '/api/purchase-analysis', { query: '센텔라 수분 크림' });
+      assert.equal(same.json.verdict, 'same', '검색어에 용량이 없으면 같은 제품으로 판정');
+      assert.deepEqual(same.json.specDifference, []);
+
+      gemini.reset();
+      await server.api('POST', '/api/products', { name: '선크림 SPF50', category: '화장품' });
+      await server.api('POST', '/api/purchase-analysis', { query: '선크림' });
+      assert.ok(gemini.state.embedTexts.includes('선크림 SPF50'), '새로 등록한 제품만 새로 계산');
+      assert.ok(!gemini.state.embedTexts.includes('센텔라 수분 크림 80ml'), '이미 계산한 제품은 재요청 없음');
+    } finally { await server.stop(); gemini.close(); }
   });
 });
