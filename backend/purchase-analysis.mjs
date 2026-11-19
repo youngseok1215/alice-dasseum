@@ -246,7 +246,8 @@ decision은 BUY, CHECK_FIRST, HOLD 중 하나로 정하세요. reason에는 위 
 /**
  * @param {{ embeddingStore?: ReturnType<typeof import('./embedding-store.mjs').createEmbeddingStore> }} [options]
  */
-export async function analyzePurchase(query, purpose, products, { embeddingStore } = {}) {
+// options.advice=false: LLM 조언 없이 기본 문장 사용 (정확도 평가용), options.debug=true: 상위 후보 점수 포함
+export async function analyzePurchase(query, purpose, products, { embeddingStore, advice: useAdvice = true, debug = false } = {}) {
   if (typeof query !== 'string' || !query.trim() || query.trim().length > 200) {
     return { status: 400, result: { error: '검색어는 1~200자로 입력해 주세요.' } };
   }
@@ -312,14 +313,14 @@ export async function analyzePurchase(query, purpose, products, { embeddingStore
         ? specDifferences(trimmed, productText(matched))
         : specDifferences(trimmed, matched.name))
       : [];
-    const advice = await generateAdvice({
+    const advice = useAdvice ? await generateAdvice({
       query: trimmed,
       purpose: purpose?.trim(),
       verdict,
       match: matched,
       similarity: selected[0] ? Number(selected[0].similarity.toFixed(3)) : undefined,
       differences,
-    });
+    }) : { ...defaultAdvice(verdict, matched, trimmed, differences), provider: 'rules' };
     return {
       status: 200,
       result: {
@@ -334,6 +335,7 @@ export async function analyzePurchase(query, purpose, products, { embeddingStore
         matchedBy: exact || rule ? 'name' : verdict === 'none' ? 'none' : 'embedding',
         ...advice,
         embeddingProvider: 'Gemini',
+        ...(debug ? { debug: { categoryFilter: queryCategory ?? null, top: ranked.slice(0, 3).map((item) => ({ productId: item.product.id, similarity: Number(item.similarity.toFixed(4)) })) } } : {}),
       },
     };
   } catch (error) {
