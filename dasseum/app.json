@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "다씀",
+    "slug": "dasseum",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F7FAF8",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "scheme": "dasseum",
+    "backgroundColor": "#F7FAF8",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F7FAF8",
+          "image": "./assets/splash-blank.png",
+          "imageWidth": 64
+        }
+      ],
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "다씀에서 제품 사진을 선택하려면 사진 접근 권한이 필요합니다.",
+          "cameraPermission": "다씀에서 제품을 촬영하려면 카메라 접근 권한이 필요합니다.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "다씀에서 제품과 유통기한을 촬영하려면 카메라 접근 권한이 필요합니다.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
