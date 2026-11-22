@@ -17,7 +17,7 @@ import { C, tx } from '@/theme/tokens';
 
 export default function Analyzing() {
   const { mode = 'search', q = '', album, attempt } = useLocalSearchParams<{ mode?: string; q?: string; album?: string; attempt?: string }>();
-  const { refreshProducts } = useApp();
+  const { refreshProducts, addRecent } = useApp();
 
   useEffect(() => {
     // 서버에 닿지 못한 경우(Wi-Fi·서버 꺼짐·응답 지연): 결과 화면으로 넘어가면 '보유 제품 없음'으로 오해할 수 있어
@@ -76,8 +76,10 @@ export default function Analyzing() {
           router.replace({ pathname: '/recognized', params: { expShot: '1' } });
           return;
         }
-        await refreshProducts().catch(() => {});
         const query = [suggestion.brand, suggestion.name].filter(Boolean).join(' ');
+        // 사진으로 확인한 제품도 '최근 확인'에 남깁니다 (검색은 check 화면에서 이미 추가).
+        if (query) addRecent(query);
+        await refreshProducts().catch(() => {});
         try {
           await analyzePurchase(query, undefined, controller.signal);
         } catch (error) {
@@ -100,7 +102,7 @@ export default function Analyzing() {
         else router.back();
       });
     return () => controller.abort();
-  }, [album, attempt, mode, q, refreshProducts]);
+  }, [addRecent, album, attempt, mode, q, refreshProducts]);
 
   const registration = mode === 'register-product' || mode === 'register-expiry';
   return (
