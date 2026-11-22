@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# 제출 자료(영상·프로토타입 등)는 언어 통계에서 제외
+submission/** linguist-documentation
