@@ -75,7 +75,7 @@ function AiAnalysisScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Sparkle /><T style={tx(15, 22, 700, C.logo)}>{generated ? 'AI 제품 비교' : '제품 비교'}</T>
         </View>
-        <T style={[tx(13, 19, 400, C.alt), { marginTop: 6 }]}>제품명·제품 설명·입력한 라벨 기준</T>
+        <T style={[tx(13, 19, 400, C.alt), { marginTop: 6 }]}>{analysis?.productSearch?.searched ? 'Google 검색으로 찾은 제품 설명·입력한 라벨 기준' : '제품명·입력한 라벨 기준'}</T>
         {analysis && <View style={{ marginTop: 10 }}><DBadge tone={tone}>{analysis.title}</DBadge></View>}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
           {[
@@ -86,7 +86,7 @@ function AiAnalysisScreen() {
               <T style={tx(12, 16, 600, C.alt)}>{column.label}</T>
               <T style={[tx(15, 22, 700), { marginTop: 4 }]}>{column.name}</T>
               {column.profile && <View style={{ marginTop: 10, gap: 6 }}>
-                <T style={tx(12, 17, 500, C.alt)}>제품 설명</T>
+                <T style={tx(12, 17, 500, C.alt)}>Google 검색으로 찾은 설명</T>
                 {column.profile.facts.map((fact) => <T key={fact} style={tx(13, 20, 400)}>{fact}</T>)}
                 {column.profile.sources.map((source) => source.url ? (
                   <Pressable key={source.label} accessibilityRole="link" onPress={() => {
