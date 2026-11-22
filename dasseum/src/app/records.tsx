@@ -91,7 +91,7 @@ export default function Records() {
         {visibleRecords.map((it, i) => (
           <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
             <Line at="bottom" />
-            <ProdImg size={44} radius={10} />
+            <ProdImg size={44} radius={10} uri={'match' in it ? undefined : it.imageUri} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <T numberOfLines={1} style={[tx(15, 22, 500), { flexShrink: 1 }]}>{it.name}</T>
