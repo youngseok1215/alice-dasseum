@@ -32,19 +32,25 @@ export type ActivityRecord = {
   createdAt: string;
 };
 
+export type ComparisonInput = { productId: string; ownedDetails: string; targetDetails: string };
+
 export type PurchaseAnalysis = {
+  productProfiles?: { owned?: ProductProfile; target?: ProductProfile };
+  comparison?: ComparisonInput;
   query: string;
   verdict: 'same' | 'similar' | 'none';
   matches: { productId: string; similarity: number }[];
   /** 판정된 보유 제품과 용량·함량이 다른 항목 (예: 보유 1000IU · 구매 예정 2000IU) */
   specDifference?: { unit: string; query: string; owned: string }[];
-  matchedBy?: 'name' | 'embedding' | 'none';
+  matchedBy?: 'name' | 'embedding' | 'profile' | 'none';
   decision: 'BUY' | 'CHECK_FIRST' | 'HOLD';
   title: string;
   reason: string;
   provider: 'Elice' | 'Gemini' | 'rules';
   embeddingProvider: 'Gemini';
 };
+
+type ProductProfile = { id: string; name: string; facts: string[]; sources: { label: string; url?: string }[] };
 
 type StoredProduct = {
   id: string;
@@ -136,11 +142,11 @@ export function getPendingPurchaseAnalysis() {
   return pendingPurchaseAnalysis;
 }
 
-export async function analyzePurchase(query: string, purpose?: string, signal?: AbortSignal) {
+export async function analyzePurchase(query: string, purpose?: string, signal?: AbortSignal, comparison?: ComparisonInput) {
   pendingPurchaseAnalysis = undefined;
   const result = await apiRequest<Partial<PurchaseAnalysis>>('/api/purchase-analysis', {
     // 서버 최악: 임베딩(10초×2)·판단 문구(12초×2, 스키마 거부 시 +12초) ≈ 80초 → 여유 있게 100초
-    method: 'POST', body: { query, purpose }, signal, timeoutMs: 100_000, failMessage: 'AI 분석을 하지 못했어요.',
+    method: 'POST', body: { query, purpose, comparison }, signal, timeoutMs: 100_000, failMessage: 'AI 분석을 하지 못했어요.',
   });
   failIf(result, result.ok && Boolean(result.payload.verdict), '유사 제품을 분석하지 못했어요.');
   pendingPurchaseAnalysis = result.payload as PurchaseAnalysis;
