@@ -717,7 +717,7 @@ const server = createServer(async (request, response) => {
     }
     if (path === '/api/purchase-analysis') {
       const products = listOwned.all(userId).map(publicProduct);
-      const { status, result } = await analyzePurchase(body?.query, body?.purpose, products, { embeddingStore });
+      const { status, result } = await analyzePurchase(body?.query, body?.purpose, products, { embeddingStore, comparison: body?.comparison });
       return send(response, status, result);
     }
     if (path === '/api/products/images/search') {

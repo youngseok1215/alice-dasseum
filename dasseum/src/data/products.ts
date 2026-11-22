@@ -158,7 +158,7 @@ export function matchQuery(q: string, mode: CheckMode, products: Product[] = Obj
 }
 
 export interface HoldRecord { name: string; match: '동일' | '유사'; date: string; isNew?: boolean }
-export interface DoneRecord { name: string; cat: Category; date: string; isNew?: boolean }
+export interface DoneRecord { name: string; cat: Category; date: string; isNew?: boolean; imageUri?: string }
 export interface RecentCheck { q: string; date: string }
 
 export const SEED = {

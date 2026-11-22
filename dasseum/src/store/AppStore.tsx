@@ -232,7 +232,9 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
       cat: record.category as Category,
       date: recordDate(record.createdAt),
       isNew: index === 0,
-    })), [recordDate, remoteRecords]);
+      // 다 쓴 제품도 내 물품 목록에 남아 있어서 같은 사진을 보여 줄 수 있어요.
+      imageUri: remoteProducts.find((product) => product.id === record.productId)?.imageUri,
+    })), [recordDate, remoteProducts, remoteRecords]);
 
   const hold = useCallback(async ({ mode, query, verdict, productId }: { mode: CheckMode; query: string; verdict: Verdict; productId: string }) => {
     if (verdict === 'none') throw new Error('보류할 보유 제품이 없어요.');
